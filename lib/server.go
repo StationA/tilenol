@@ -21,6 +21,7 @@ import (
 
 type Server struct {
 	Port          uint16
+	InternalPort  uint16
 	EnableCORS    bool
 	GzipResponses bool
 	CacheControl  string
@@ -53,9 +54,27 @@ func (s *Server) Start() {
 	r.Get("/{featureType}/{z}/{x}/{y}.mvt", s.GetVectorTile)
 
 	// TODO: Add GeoJSON endpoint?
+
+	i := chi.NewRouter()
+	i.Get("/healthcheck", s.HealthCheck)
 	// TODO: Add healthcheck/status endpoint
 
-	log.Fatalln(http.ListenAndServe(fmt.Sprintf(":%d", s.Port), r))
+	errors := make(chan error)
+
+	go func() {
+		errors <- http.ListenAndServe(fmt.Sprintf(":%d", s.Port), r)
+	}()
+
+	go func() {
+		errors <- http.ListenAndServe(fmt.Sprintf(":%d", s.InternalPort), i)
+	}()
+
+	log.Fatalln(<-errors)
+}
+
+func (s *Server) HealthCheck(w http.ResponseWriter, r *http.Request) {
+	// TODO: Maybe in the future check that ES is reachable?
+	fmt.Fprintf(w, "OK")
 }
 
 func flatten(something interface{}, accum map[string]interface{}, prefixParts ...string) {

@@ -23,10 +23,16 @@ var (
 		StringMap()
 	port = runCmd.
 		Flag("port", "Port to serve tiles on").
-		Envar("PORT0").
+		Envar("PORT").
 		Short('p').
 		Default("3000").
 		Uint16()
+	internalPort = runCmd.
+			Flag("internal-port", "Port for internal metrics and healthchecks").
+			Envar("INTERNAL_PORT").
+			Short('i').
+			Default("3001").
+			Uint16()
 	cors = runCmd.
 		Flag("enable-cors", "Enables cross-origin resource sharing (CORS)").
 		Envar("ENABLE_CORS").
@@ -54,6 +60,7 @@ func main() {
 	case runCmd.FullCommand():
 		(&tilenol.Server{
 			Port:          *port,
+			InternalPort:  *internalPort,
 			EnableCORS:    *cors,
 			GzipResponses: *gzip,
 			CacheControl:  *cache,
