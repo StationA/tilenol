@@ -12,20 +12,16 @@
 
 [[constraint]]
   branch = "master"
-  name = "github.com/oliveagle/jsonpath"
-
-[[constraint]]
-  branch = "master"
   name = "github.com/paulmach/orb"
 
 [[constraint]]
   name = "gopkg.in/alecthomas/kingpin.v2"
   version = "2.2.6"
 
-[prune]
-  go-tests = true
-  unused-packages = true
-
 [[constraint]]
   name = "github.com/sirupsen/logrus"
   version = "1.0.5"
+
+[prune]
+  go-tests = true
+  unused-packages = true
