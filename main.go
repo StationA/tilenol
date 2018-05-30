@@ -20,10 +20,10 @@ var (
 		Short('m').
 		Default("_all=geometry").
 		StringMap()
-	esSource = runCmd.
-			Flag("es-sources", "ElasticSearch index name to source field pattern mappings").
-			Short('s').
-			Default("_all=geometry").
+	zoomRanges = runCmd.
+			Flag("zoom-ranges", "ElasticSearch index name to zoom range mappings").
+			Short('Z').
+			Default("_all=0-18").
 			StringMap()
 	port = runCmd.
 		Flag("port", "Port to serve tiles on").
@@ -51,7 +51,7 @@ var (
 		Flag("cache-control", "Sets the \"Cache-Control\" header").
 		Envar("TILENOL_CACHE_CONTROL").
 		Short('c').
-		Default("max-age=315360000").
+		Default("no-cache").
 		String()
 	versionCmd = kingpin.
 			Command("version", "Prints out the version")
@@ -70,7 +70,7 @@ func main() {
 		server.CacheControl = *cache
 		server.ESHost = *esHost
 		server.ESMappings = *esMap
-		server.ESSource = *esSource
+		server.ZoomRanges = *zoomRanges
 		server.Start()
 	case versionCmd.FullCommand():
 		PrintVersionInfo()

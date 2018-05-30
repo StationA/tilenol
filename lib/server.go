@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/ddliu/go-httpclient"
 	"github.com/go-chi/chi"
@@ -19,6 +20,13 @@ import (
 	"github.com/paulmach/orb/simplify"
 )
 
+const (
+	MinZoom     = 0
+	MaxZoom     = 22
+	MinSimplify = 1.0
+	MaxSimplify = 10.0
+)
+
 type Server struct {
 	Port          uint16
 	InternalPort  uint16
@@ -27,7 +35,7 @@ type Server struct {
 	CacheControl  string
 	ESHost        string
 	ESMappings    map[string]string
-	ESSource      map[string]string
+	ZoomRanges    map[string]string
 }
 
 func (s *Server) Start() {
@@ -70,7 +78,7 @@ func (s *Server) Start() {
 		log.Fatalln(http.ListenAndServe(fmt.Sprintf(":%d", s.InternalPort), i))
 	}()
 
-	Logger.Infof("tilenol server up and running @ 0.0.0.0:[%d,%d]", s.Port, s.InternalPort)
+	Logger.Infof("Tilenol server up and running @ 0.0.0.0:[%d,%d]", s.Port, s.InternalPort)
 
 	select {}
 }
@@ -120,10 +128,18 @@ func esResultsToFeatureCollection(esRes map[string]interface{}, geometryField st
 				feat.Properties = make(map[string]interface{})
 				flatten(source, feat.Properties)
 			}
+			feat.Properties["id"] = id
 			fc.Append(feat)
 		}
 	}
 	return fc
+}
+
+func calculateSimplificationThreshold(minZoom, maxZoom, currentZoom int) float64 {
+	s := MinSimplify - MaxSimplify
+	z := float64(maxZoom - minZoom)
+	p := s / z
+	return p*float64(currentZoom-minZoom) + MaxSimplify
 }
 
 func (s *Server) GetVectorTile(w http.ResponseWriter, r *http.Request) {
@@ -132,45 +148,72 @@ func (s *Server) GetVectorTile(w http.ResponseWriter, r *http.Request) {
 	x, _ := strconv.Atoi(chi.URLParam(r, "x"))
 	y, _ := strconv.Atoi(chi.URLParam(r, "y"))
 
-	Logger.Infof("Retrieving vector tile for layer [%s] @ (%d, %d, %d)", featureType, x, y, z)
+	Logger.Debugf("Retrieving vector tile for layer [%s] @ (%d, %d, %d)", featureType, x, y, z)
 
 	geometryField, hasGeometryField := s.ESMappings[featureType]
 	if !hasGeometryField {
 		geometryField = "geometry"
 	}
-	sourceFields, hasSourceFields := s.ESSource[featureType]
-	if !hasSourceFields {
-		sourceFields = geometryField
+	Logger.Debugf("Using geometry field [%s]", geometryField)
+
+	extraSources, hasExtraSources := r.URL.Query()["source"]
+	if hasExtraSources {
+		Logger.Debugf("Requesting additional source fields [%s]", extraSources)
 	}
+
+	// Convert x,y,z into lat-lon bounds for ES query construction
 	tile := maptile.New(uint32(x), uint32(y), maptile.Zoom(z))
 	tileBounds := tile.Bound()
-	esRes, esErr := s.doQuery(featureType, geometryField, sourceFields, tileBounds)
+	esStart := time.Now()
+	esRes, esErr := s.doQuery(featureType, geometryField, extraSources, tileBounds)
+	esElapsed := time.Since(esStart)
+	Logger.Debugf("ES query for layer [%s] @ (%d, %d, %d) took %s", featureType, x, y, z, esElapsed)
 	if esErr != nil {
 		Logger.Errorf("Failed to do ES query: %+v", esErr)
+		s.HandleError(esErr, w, r)
 		return
 	}
+
+	// Create GeoJSON FeatureCollection from ES results
 	fc := esResultsToFeatureCollection(esRes, geometryField)
-	layers := mvt.NewLayers(map[string]*geojson.FeatureCollection{
-		// TODO: Allow for multi-layer queries
-		featureType: fc,
-	})
-	layers.ProjectToTile(tile)
-	layers.Clip(mvt.MapboxGLDefaultExtentBound)
-	layers.Simplify(simplify.DouglasPeucker(1.0))
-	layers.RemoveEmpty(1.0, 1.0)
-	data, marshalErr := mvt.MarshalGzipped(layers)
-	if marshalErr != nil {
-		// TODO: Handle error
+	// TODO: Allow for multi-layer queries
+	layer := mvt.NewLayer(featureType, fc)
+	layer.Version = 2 // Set to tile spec v2
+	layer.ProjectToTile(tile)
+	layer.Clip(mvt.MapboxGLDefaultExtentBound)
+	minZoom := MinZoom
+	maxZoom := MaxZoom
+	zoomRange, hasZoomRange := s.ZoomRanges[featureType]
+	if hasZoomRange {
+		zoomRangeParts := strings.Split(zoomRange, "-")
+		if len(zoomRangeParts) >= 1 {
+			minZoom, _ = strconv.Atoi(zoomRangeParts[0])
+		}
+		if len(zoomRangeParts) == 2 {
+			maxZoom, _ = strconv.Atoi(zoomRangeParts[1])
+		}
 	}
+	simplifyThreshold := calculateSimplificationThreshold(minZoom, maxZoom, z)
+	Logger.Debugf("Simplifying @ zoom [%d], epsilon [%f]", z, simplifyThreshold)
+	layer.Simplify(simplify.DouglasPeucker(simplifyThreshold))
+	layer.RemoveEmpty(1.0, 1.0)
+
+	// Set standard response headers
 	w.Header().Set("Cache-Control", s.CacheControl)
 	if s.GzipResponses {
 		w.Header().Set("Content-Encoding", "gzip")
 	}
+
+	// Lastly, marshal the object into the response output
+	data, marshalErr := mvt.MarshalGzipped(mvt.Layers{layer})
+	if marshalErr != nil {
+		// TODO: Handle error
+	}
 	_, _ = w.Write(data)
 }
 
-func (s *Server) doQuery(index, geometryField, sourceFields string, tileBounds orb.Bound) (map[string]interface{}, error) {
-	sourceParam := append(strings.Split(sourceFields, ","), geometryField)
+func (s *Server) doQuery(index, geometryField string, extraSources []string, tileBounds orb.Bound) (map[string]interface{}, error) {
+	sourceParam := append(extraSources, geometryField)
 	query := map[string]interface{}{
 		"query": map[string]interface{}{
 			"bool": map[string]interface{}{
@@ -213,4 +256,8 @@ func (s *Server) doQuery(index, geometryField, sourceFields string, tileBounds o
 	var esRes map[string]interface{}
 	_ = json.Unmarshal(bodyBytes, &esRes)
 	return esRes, nil
+}
+
+func (s *Server) HandleError(err error, w http.ResponseWriter, r *http.Request) {
+	http.Error(w, err.Error(), http.StatusInternalServerError)
 }
