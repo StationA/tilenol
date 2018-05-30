@@ -27,6 +27,7 @@ type Server struct {
 	CacheControl  string
 	ESHost        string
 	ESMappings    map[string]string
+	ESSource      map[string]string
 }
 
 func (s *Server) Start() {
@@ -37,15 +38,17 @@ func (s *Server) Start() {
 	r := chi.NewRouter()
 
 	//-- MIDDLEWARE
+	r.Use(middleware.RequestID)
+	r.Use(middleware.RealIP)
 	r.Use(middleware.Logger)
+	r.Use(middleware.Recoverer)
 
 	if s.EnableCORS {
+		Logger.Infoln("Enabling CORS support")
 		cors := cors.New(cors.Options{
 			AllowedOrigins:   []string{"*"},
 			AllowedMethods:   []string{"GET", "OPTIONS"},
-			AllowedHeaders:   []string{"Accept", "Accept-Encoding"},
 			AllowCredentials: true,
-			MaxAge:           300,
 		})
 		r.Use(cors.Handler)
 	}
@@ -59,17 +62,17 @@ func (s *Server) Start() {
 	i.Get("/healthcheck", s.HealthCheck)
 	// TODO: Add healthcheck/status endpoint
 
-	errors := make(chan error)
-
 	go func() {
-		errors <- http.ListenAndServe(fmt.Sprintf(":%d", s.Port), r)
+		log.Fatalln(http.ListenAndServe(fmt.Sprintf(":%d", s.Port), r))
 	}()
 
 	go func() {
-		errors <- http.ListenAndServe(fmt.Sprintf(":%d", s.InternalPort), i)
+		log.Fatalln(http.ListenAndServe(fmt.Sprintf(":%d", s.InternalPort), i))
 	}()
 
-	log.Fatalln(<-errors)
+	Logger.Infof("tilenol server up and running @ 0.0.0.0:[%d,%d]", s.Port, s.InternalPort)
+
+	select {}
 }
 
 func (s *Server) HealthCheck(w http.ResponseWriter, r *http.Request) {
@@ -98,25 +101,27 @@ func flatten(something interface{}, accum map[string]interface{}, prefixParts ..
 
 func esResultsToFeatureCollection(esRes map[string]interface{}, geometryField string) *geojson.FeatureCollection {
 	fc := geojson.NewFeatureCollection()
-	outerHits := esRes["hits"].(map[string]interface{})
-	hits := outerHits["hits"].([]interface{})
-	for _, el := range hits {
-		hit := el.(map[string]interface{})
-		id := hit["_id"]
-		source := hit["_source"].(map[string]interface{})
-		geometry := source[geometryField]
-		gj, _ := json.Marshal(geometry)
-		geom, _ := geojson.UnmarshalGeometry(gj)
-		feat := geojson.NewFeature(geom.Geometry())
-		feat.ID = id
-		props, hasProps := source["properties"]
-		if hasProps {
-			feat.Properties = props.(map[string]interface{})
-		} else {
-			feat.Properties = make(map[string]interface{})
-			flatten(source, feat.Properties)
+	if esRes["hits"] != nil {
+		outerHits := esRes["hits"].(map[string]interface{})
+		hits := outerHits["hits"].([]interface{})
+		for _, el := range hits {
+			hit := el.(map[string]interface{})
+			id := hit["_id"]
+			source := hit["_source"].(map[string]interface{})
+			geometry := source[geometryField]
+			gj, _ := json.Marshal(geometry)
+			geom, _ := geojson.UnmarshalGeometry(gj)
+			feat := geojson.NewFeature(geom.Geometry())
+			feat.ID = id
+			props, hasProps := source["properties"]
+			if hasProps && props != nil {
+				feat.Properties = props.(map[string]interface{})
+			} else {
+				feat.Properties = make(map[string]interface{})
+				flatten(source, feat.Properties)
+			}
+			fc.Append(feat)
 		}
-		fc.Append(feat)
 	}
 	return fc
 }
@@ -126,13 +131,24 @@ func (s *Server) GetVectorTile(w http.ResponseWriter, r *http.Request) {
 	z, _ := strconv.Atoi(chi.URLParam(r, "z"))
 	x, _ := strconv.Atoi(chi.URLParam(r, "x"))
 	y, _ := strconv.Atoi(chi.URLParam(r, "y"))
-	geometryField, noGeometryField := s.ESMappings[featureType]
-	if noGeometryField {
-		// TODO: Handle error
+
+	Logger.Infof("Retrieving vector tile for layer [%s] @ (%d, %d, %d)", featureType, x, y, z)
+
+	geometryField, hasGeometryField := s.ESMappings[featureType]
+	if !hasGeometryField {
+		geometryField = "geometry"
+	}
+	sourceFields, hasSourceFields := s.ESSource[featureType]
+	if !hasSourceFields {
+		sourceFields = geometryField
 	}
 	tile := maptile.New(uint32(x), uint32(y), maptile.Zoom(z))
 	tileBounds := tile.Bound()
-	esRes := s.doQuery(featureType, geometryField, tileBounds)
+	esRes, esErr := s.doQuery(featureType, geometryField, sourceFields, tileBounds)
+	if esErr != nil {
+		Logger.Errorf("Failed to do ES query: %+v", esErr)
+		return
+	}
 	fc := esResultsToFeatureCollection(esRes, geometryField)
 	layers := mvt.NewLayers(map[string]*geojson.FeatureCollection{
 		// TODO: Allow for multi-layer queries
@@ -153,7 +169,8 @@ func (s *Server) GetVectorTile(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(data)
 }
 
-func (s *Server) doQuery(index, geometryField string, tileBounds orb.Bound) map[string]interface{} {
+func (s *Server) doQuery(index, geometryField, sourceFields string, tileBounds orb.Bound) (map[string]interface{}, error) {
+	sourceParam := append(strings.Split(sourceFields, ","), geometryField)
 	query := map[string]interface{}{
 		"query": map[string]interface{}{
 			"bool": map[string]interface{}{
@@ -176,19 +193,24 @@ func (s *Server) doQuery(index, geometryField string, tileBounds orb.Bound) map[
 				},
 			},
 		},
-		"size": 10000,
+		"_source": sourceParam,
+		"size":    10000,
 	}
 	jsonQuery, _ := json.Marshal(query)
 	url := fmt.Sprintf("http://%s/%s/_search", s.ESHost, index)
-	res, _ := httpclient.
+	res, esErr := httpclient.
 		Begin().
 		WithHeader("Accept", "application/json").
 		PostJson(url, jsonQuery)
+	if esErr != nil {
+		return nil, esErr
+	}
+	// TODO: Also handle ES JSON-based errors
 	bodyBytes, _ := res.ReadAll()
 	defer func() {
 		_ = res.Body.Close()
 	}()
 	var esRes map[string]interface{}
 	_ = json.Unmarshal(bodyBytes, &esRes)
-	return esRes
+	return esRes, nil
 }
