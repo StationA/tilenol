@@ -56,6 +56,7 @@ func (s *Server) Start() {
 		cors := cors.New(cors.Options{
 			AllowedOrigins:   []string{"*"},
 			AllowedMethods:   []string{"GET", "OPTIONS"},
+			AllowedHeaders:   []string{"Accept", "Accept-Encoding", "Authorization"},
 			AllowCredentials: true,
 		})
 		r.Use(cors.Handler)
