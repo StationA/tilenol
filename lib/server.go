@@ -118,6 +118,8 @@ func esResultsToFeatureCollection(esRes map[string]interface{}, geometryField st
 			id := hit["_id"]
 			source := hit["_source"].(map[string]interface{})
 			geometry := source[geometryField]
+			// Remove geometry from source to avoid sending extra data
+			delete(source, geometryField)
 			gj, _ := json.Marshal(geometry)
 			geom, _ := geojson.UnmarshalGeometry(gj)
 			feat := geojson.NewFeature(geom.Geometry())
