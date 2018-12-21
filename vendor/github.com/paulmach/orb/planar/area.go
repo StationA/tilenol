@@ -18,6 +18,8 @@ func Area(g orb.Geometry) float64 {
 
 // CentroidArea returns both the centroid and the area in the 2d plane.
 // Since the area is need for the centroid, return both.
+// Polygon area will always be >= zero. Ring area my be negative if it has
+// a clockwise winding orider.
 func CentroidArea(g orb.Geometry) (orb.Point, float64) {
 	if g == nil {
 		return orb.Point{}, 0
@@ -188,15 +190,23 @@ func polygonCentroidArea(p orb.Polygon) (orb.Point, float64) {
 
 	centroid, area := ringCentroidArea(p[0])
 	area = math.Abs(area)
+	if len(p) == 1 {
+		if area == 0 {
+			c, _ := lineStringCentroidDist(orb.LineString(p[0]))
+			return c, 0
+		}
+		return centroid, area
+	}
 
 	holeArea := 0.0
-	holeCentroid := orb.Point{}
+	weightedHoleCentroid := orb.Point{}
 	for i := 1; i < len(p); i++ {
 		hc, ha := ringCentroidArea(p[i])
+		ha = math.Abs(ha)
 
-		holeArea += math.Abs(ha)
-		holeCentroid[0] += hc[0] * ha
-		holeCentroid[1] += hc[1] * ha
+		holeArea += ha
+		weightedHoleCentroid[0] += hc[0] * ha
+		weightedHoleCentroid[1] += hc[1] * ha
 	}
 
 	totalArea := area - holeArea
@@ -205,8 +215,8 @@ func polygonCentroidArea(p orb.Polygon) (orb.Point, float64) {
 		return c, 0
 	}
 
-	centroid[0] = (area*centroid[0] - holeArea*holeCentroid[0]) / totalArea
-	centroid[1] = (area*centroid[1] - holeArea*holeCentroid[1]) / totalArea
+	centroid[0] = (area*centroid[0] - weightedHoleCentroid[0]) / totalArea
+	centroid[1] = (area*centroid[1] - weightedHoleCentroid[1]) / totalArea
 
 	return centroid, totalArea
 }
