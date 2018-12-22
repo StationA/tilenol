@@ -1,8 +1,10 @@
 FROM golang:alpine AS build
 
+RUN apk update && apk add make
+
 ADD . /go/src/github.com/jerluc/tilenol
 WORKDIR /go/src/github.com/jerluc/tilenol
-RUN ./build.sh
+RUN make release
 
 FROM alpine:3.7
 

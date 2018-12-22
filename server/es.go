@@ -1,0 +1,109 @@
+package server
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"strings"
+	"time"
+
+	"github.com/paulmach/orb"
+	"github.com/paulmach/orb/geojson"
+)
+
+const (
+	// TODO: Externalize these?
+	ScrollSize    = 250
+	ScrollTimeout = time.Minute
+)
+
+func buildQuery(geometryField string, extraSources []string, tileBounds orb.Bound) interface{} {
+	sourceParam := append(extraSources, "properties", geometryField)
+	return map[string]interface{}{
+		"query": map[string]interface{}{
+			"bool": map[string]interface{}{
+				"must": map[string]interface{}{
+					"match_all": map[string]interface{}{},
+				},
+				"filter": map[string]interface{}{
+					"geo_shape": map[string]interface{}{
+						geometryField: map[string]interface{}{
+							"shape": map[string]interface{}{
+								"type": "envelope",
+								"coordinates": [][]float64{
+									[]float64{tileBounds.Left(), tileBounds.Top()},
+									[]float64{tileBounds.Right(), tileBounds.Bottom()},
+								},
+							},
+							"relation": "intersects",
+						},
+					},
+				},
+			},
+		},
+		"_source": sourceParam,
+	}
+}
+
+func (s *Server) doQuery(ctx context.Context, index, geometryField string, extraSources []string, tileBounds orb.Bound) (*geojson.FeatureCollection, error) {
+	fc := geojson.NewFeatureCollection()
+
+	query := buildQuery(geometryField, extraSources, tileBounds)
+
+	scroll := s.ES.Scroll(index).Body(query).Size(ScrollSize)
+	for {
+		scrollCtx, scrollCancel := context.WithTimeout(ctx, ScrollTimeout)
+		results, err := scroll.Do(scrollCtx)
+		if err == io.EOF {
+			scrollCancel()
+			break
+		}
+		if err != nil {
+			scrollCancel()
+			return nil, err
+		}
+		for _, hit := range results.Hits.Hits {
+			id := hit.Id
+			var source map[string]interface{}
+			err := json.Unmarshal(*hit.Source, &source)
+			if err != nil {
+				return nil, err
+			}
+			geometry := source[geometryField]
+			// Remove geometry from source to avoid sending extra data
+			delete(source, geometryField)
+			gj, _ := json.Marshal(geometry)
+			geom, _ := geojson.UnmarshalGeometry(gj)
+			feat := geojson.NewFeature(geom.Geometry())
+			feat.ID = id
+			feat.Properties = make(map[string]interface{})
+			flatten(source["properties"], feat.Properties)
+			delete(source, "properties")
+			flatten(source, feat.Properties)
+			feat.Properties["id"] = id
+			fc.Append(feat)
+		}
+		scrollCancel()
+	}
+	return fc, nil
+}
+
+func flatten(something interface{}, accum map[string]interface{}, prefixParts ...string) {
+	if something == nil {
+		return
+	}
+	switch something.(type) {
+	case []interface{}:
+		for i, thing := range something.([]interface{}) {
+			flatten(thing, accum, append(prefixParts, fmt.Sprintf("%d", i))...)
+		}
+	case map[string]interface{}:
+		for key, value := range something.(map[string]interface{}) {
+			flatten(value, accum, append(prefixParts, key)...)
+		}
+	default:
+		newKey := strings.Join(prefixParts, ".")
+		accum[newKey] = something
+	}
+}

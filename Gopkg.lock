@@ -65,6 +65,31 @@
 
 [[projects]]
   branch = "master"
+  digest = "1:aa3d8d42865c42626b5c1add193692d045b3188b1479f0a0a88690d21fe20083"
+  name = "github.com/mailru/easyjson"
+  packages = [
+    ".",
+    "buffer",
+    "jlexer",
+    "jwriter",
+  ]
+  pruneopts = "UT"
+  revision = "60711f1a8329503b04e1c88535f419d0bb440bff"
+
+[[projects]]
+  digest = "1:995fe8c9729e94587361e836896824337bbceab8030f698a40552b1a63bf2c59"
+  name = "github.com/olivere/elastic"
+  packages = [
+    ".",
+    "config",
+    "uritemplates",
+  ]
+  pruneopts = "UT"
+  revision = "1619150b007041b6dba8aa447f0e2d151cc2b4c5"
+  version = "v6.2.14"
+
+[[projects]]
+  branch = "master"
   digest = "1:6f79c3d0958796e132c943f700c3161b82f9d2fd13e77f96440fe6ccc0f9388b"
   name = "github.com/paulmach/orb"
   packages = [
@@ -134,6 +159,7 @@
     "github.com/go-chi/chi",
     "github.com/go-chi/chi/middleware",
     "github.com/go-chi/cors",
+    "github.com/olivere/elastic",
     "github.com/paulmach/orb",
     "github.com/paulmach/orb/encoding/mvt",
     "github.com/paulmach/orb/geojson",
