@@ -70,9 +70,18 @@ func (s *Server) doQuery(ctx context.Context, index, geometryField string, extra
 			if err != nil {
 				return nil, err
 			}
-			geometry := source[geometryField]
+			// Extract geometry value (potentially nested in the source)
+			geometryFieldParts := strings.Split(geometryField, ".")
+			numParts := len(geometryFieldParts)
+			lastPart := geometryFieldParts[numParts-1]
+			parent, found := GetNested(source, geometryFieldParts[0:numParts-1])
+			if !found {
+				return nil, fmt.Errorf("Couldn't find geometry at field: %s", geometryField)
+			}
+			parentMap := parent.(map[string]interface{})
+			geometry := parentMap[lastPart]
 			// Remove geometry from source to avoid sending extra data
-			delete(source, geometryField)
+			delete(parentMap, lastPart)
 			gj, _ := json.Marshal(geometry)
 			geom, _ := geojson.UnmarshalGeometry(gj)
 			feat := geojson.NewFeature(geom.Geometry())
@@ -106,4 +115,20 @@ func flatten(something interface{}, accum map[string]interface{}, prefixParts ..
 		newKey := strings.Join(prefixParts, ".")
 		accum[newKey] = something
 	}
+}
+
+func GetNested(something interface{}, keyParts []string) (interface{}, bool) {
+	if len(keyParts) == 0 {
+		return something, true
+	}
+	if something != nil {
+		switch m := something.(type) {
+		case map[string]interface{}:
+			v, found := m[keyParts[0]]
+			if found {
+				return GetNested(v, keyParts[1:])
+			}
+		}
+	}
+	return nil, false
 }
