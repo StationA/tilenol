@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"runtime"
 
-	"github.com/jerluc/tilenol/server"
+	"github.com/stationa/tilenol/server"
 	"gopkg.in/alecthomas/kingpin.v2"
 )
 
