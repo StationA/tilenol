@@ -69,11 +69,10 @@ func PrintVersionInfo() {
 }
 
 func main() {
-	numCores := runtime.NumCPU()
 	if *numProcs < 1 {
-		*numProcs = numCores
+		*numProcs = runtime.NumCPU()
 	}
-	runtime.GOMAXPROCS(numCores)
+	runtime.GOMAXPROCS(*numProcs)
 
 	cmd := kingpin.Parse()
 
