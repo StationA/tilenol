@@ -50,11 +50,11 @@ var (
 		Short('c').
 		Default("no-cache").
 		String()
-	numCores = runCmd.
-			Flag("num-cores", "Sets the number of CPU cores to be used").
-			Envar("TILENOL_NUM_CORES").
+	numProcs = runCmd.
+			Flag("num-processes", "Sets the number of processes to be used").
+			Envar("TILENOL_NUM_PROCESSES").
 			Short('n').
-			Default("1").
+			Default("0").
 			Int()
 	versionCmd = kingpin.
 			Command("version", "Prints out the version")
@@ -69,7 +69,11 @@ func PrintVersionInfo() {
 }
 
 func main() {
-	runtime.GOMAXPROCS(*numCores)
+	numCores := runtime.NumCPU()
+	if *numProcs < 1 {
+		*numProcs = numCores
+	}
+	runtime.GOMAXPROCS(numCores)
 
 	cmd := kingpin.Parse()
 
