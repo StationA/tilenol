@@ -19,7 +19,7 @@ const (
 )
 
 func buildQuery(geometryField string, extraSources []string, tileBounds orb.Bound) interface{} {
-	sourceParam := append(extraSources, "properties", geometryField)
+	sourceParam := append(extraSources, geometryField)
 	return map[string]interface{}{
 		"query": map[string]interface{}{
 			"bool": map[string]interface{}{
