@@ -149,6 +149,7 @@ func (s *Server) GetVectorTile(w http.ResponseWriter, r *http.Request) {
 	// Set standard response headers
 	w.Header().Set("Cache-Control", s.CacheControl)
 	w.Header().Set("Content-Encoding", "gzip")
+	w.Header().Set("Content-Type", "application/x-protobuf")
 	// Lastly, marshal the object into the response output
 	data, marshalErr := mvt.MarshalGzipped(mvt.Layers{layer})
 	if marshalErr != nil {
