@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/olivere/elastic"
 )
@@ -41,6 +42,8 @@ func ESHost(esHost string) ConfigOption {
 		client, err := elastic.NewClient(
 			elastic.SetURL(fmt.Sprintf("http://%s", esHost)),
 			elastic.SetGzip(true),
+			// TODO: Should this be configurable?
+			elastic.SetHealthcheckTimeoutStartup(30*time.Second),
 		)
 		s.ES = client
 		return err
