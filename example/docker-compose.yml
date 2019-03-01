@@ -1,0 +1,20 @@
+version: '3'
+services:
+  es:
+    image: docker.elastic.co/elasticsearch/elasticsearch:6.5.1
+    environment:
+      discovery.type: single-node
+    ports:
+      - 9200:9200
+      - 9300:9300
+  tilenol:
+    image: stationa/tilenol:latest
+    command: run
+    environment:
+      TILENOL_ES_HOST: es:9200
+      TILENOL_ENABLE_CORS: "true"
+    ports:
+      - 3000:3000
+      - 3001:3001
+    depends_on:
+      - es

@@ -63,6 +63,7 @@ func (s *Server) doQuery(ctx context.Context, index, geometryField string, extra
 			scrollCancel()
 			return nil, err
 		}
+		Logger.Debugf("Scrolling %d hits", len(results.Hits.Hits))
 		for _, hit := range results.Hits.Hits {
 			id := hit.Id
 			var source map[string]interface{}
@@ -91,6 +92,7 @@ func (s *Server) doQuery(ctx context.Context, index, geometryField string, extra
 			delete(source, "properties")
 			flatten(source, feat.Properties)
 			feat.Properties["id"] = id
+			Logger.Debugf("Adding feature to layer: %+v", feat)
 			fc.Append(feat)
 		}
 		scrollCancel()

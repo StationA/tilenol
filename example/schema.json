@@ -1,0 +1,17 @@
+{
+  "mappings": {
+    "_doc": {
+      "properties": {
+        "name": {
+          "type": "text"
+        },
+        "stories": {
+          "type": "integer"
+        },
+        "geometry": {
+          "type": "geo_shape"
+        }
+      }
+    }
+  }
+}
