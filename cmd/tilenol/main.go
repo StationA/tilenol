@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"runtime"
 
+	"github.com/sirupsen/logrus"
 	"github.com/stationa/tilenol/server"
 	"gopkg.in/alecthomas/kingpin.v2"
 )
@@ -11,6 +12,10 @@ import (
 var (
 	runCmd = kingpin.
 		Command("run", "Runs the Tilenol server")
+	debug = runCmd.
+		Flag("debug", "Enable debug mode").
+		Short('d').
+		Bool()
 	esHost = runCmd.
 		Flag("es-host", "ElasticSearch host-port").
 		Envar("TILENOL_ES_HOST").
@@ -78,6 +83,10 @@ func main() {
 
 	switch cmd {
 	case runCmd.FullCommand():
+		if *debug {
+			server.Logger.SetLevel(logrus.DebugLevel)
+		}
+
 		var opts []server.ConfigOption
 		opts = append(opts, server.Port(*port))
 		opts = append(opts, server.InternalPort(*internalPort))
