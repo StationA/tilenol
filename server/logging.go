@@ -5,5 +5,6 @@ import (
 )
 
 var (
+	// Logger is the global logging instance
 	Logger = logrus.New()
 )

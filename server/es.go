@@ -14,7 +14,10 @@ import (
 
 const (
 	// TODO: Externalize these?
-	ScrollSize    = 250
+
+	// ScrollSize is the max number of documents per scroll page
+	ScrollSize = 250
+	// ScrollTimeout is the time.Duration to keep the scroll context alive
 	ScrollTimeout = time.Minute
 )
 
@@ -118,6 +121,7 @@ func flatten(something interface{}, accum map[string]interface{}, prefixParts ..
 	}
 }
 
+// GetNested is a utility function to traverse a path of keys in a nested JSON object
 func GetNested(something interface{}, keyParts []string) (interface{}, bool) {
 	if len(keyParts) == 0 {
 		return something, true

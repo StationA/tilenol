@@ -66,10 +66,14 @@ var (
 )
 
 // Auto-filled by build
+
+// Version is the tilenol version string
 var Version string
+
+// Commitish is the Git commit-ish for this binary
 var Commitish string
 
-func PrintVersionInfo() {
+func printVersionInfo() {
 	fmt.Printf("tilenol version=%s (%s)\n", Version, Commitish)
 }
 
@@ -104,6 +108,6 @@ func main() {
 		}
 		s.Start()
 	case versionCmd.FullCommand():
-		PrintVersionInfo()
+		printVersionInfo()
 	}
 }

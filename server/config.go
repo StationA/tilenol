@@ -9,8 +9,10 @@ import (
 	"github.com/olivere/elastic"
 )
 
+// ConfigOption is a function that changes a configuration setting of the server.Server
 type ConfigOption func(s *Server) error
 
+// Port hanges the port number used for serving tile data
 func Port(port uint16) ConfigOption {
 	return func(s *Server) error {
 		s.Port = port
@@ -18,6 +20,7 @@ func Port(port uint16) ConfigOption {
 	}
 }
 
+// InternalPort changes the port number used for administrative endpoints (e.g. healthcheck)
 func InternalPort(internalPort uint16) ConfigOption {
 	return func(s *Server) error {
 		s.InternalPort = internalPort
@@ -25,11 +28,13 @@ func InternalPort(internalPort uint16) ConfigOption {
 	}
 }
 
+// EnableCORS configures the server for CORS (cross-origin resource sharing)
 func EnableCORS(s *Server) error {
 	s.EnableCORS = true
 	return nil
 }
 
+// CacheControl sets a fixed string to be used for the Cache-Control HTTP header
 func CacheControl(cacheControl string) ConfigOption {
 	return func(s *Server) error {
 		s.CacheControl = cacheControl
@@ -37,6 +42,7 @@ func CacheControl(cacheControl string) ConfigOption {
 	}
 }
 
+// ESHost sets the Elasticsearch backend host:port
 func ESHost(esHost string) ConfigOption {
 	return func(s *Server) error {
 		client, err := elastic.NewClient(
@@ -50,6 +56,7 @@ func ESHost(esHost string) ConfigOption {
 	}
 }
 
+// ESMappings sets a custom mapping from index name to geometry field name
 func ESMappings(esMappings map[string]string) ConfigOption {
 	return func(s *Server) error {
 		s.ESMappings = esMappings
@@ -57,6 +64,7 @@ func ESMappings(esMappings map[string]string) ConfigOption {
 	}
 }
 
+// ZoomRanges sets min and max zoom limits for a specific index
 func ZoomRanges(strZoomRanges map[string]string) ConfigOption {
 	return func(s *Server) error {
 		zoomRanges := make(map[string][]int)

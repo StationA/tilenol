@@ -17,12 +17,17 @@ import (
 )
 
 const (
-	MinZoom     = 0
-	MaxZoom     = 22
+	// MinZoom is the default minimum zoom for a layer
+	MinZoom = 0
+	// MaxZoom is the default maximum zoom for a layer
+	MaxZoom = 22
+	// MinSimplify is the minimum simplification radius
 	MinSimplify = 1.0
+	// MaxSimplify is the maximum simplification radius
 	MaxSimplify = 10.0
 )
 
+// Server is a tilenol server instance
 type Server struct {
 	Port         uint16
 	InternalPort uint16
@@ -33,6 +38,7 @@ type Server struct {
 	ZoomRanges   map[string][]int
 }
 
+// NewServer creates a new server instance pre-configured with the given ConfigOption's
 func NewServer(configOpts ...ConfigOption) (*Server, error) {
 	s := &Server{}
 	for _, opt := range configOpts {
@@ -44,6 +50,7 @@ func NewServer(configOpts ...ConfigOption) (*Server, error) {
 	return s, nil
 }
 
+// Start actually starts the server instance. Note that this blocks until an interrupting signal
 func (s *Server) Start() {
 	r := chi.NewRouter()
 
@@ -65,12 +72,12 @@ func (s *Server) Start() {
 	}
 
 	//-- ROUTES
-	r.Get("/{featureType}/{z}/{x}/{y}.mvt", s.GetVectorTile)
+	r.Get("/{featureType}/{z}/{x}/{y}.mvt", s.getVectorTile)
 
 	// TODO: Add GeoJSON endpoint?
 
 	i := chi.NewRouter()
-	i.Get("/healthcheck", s.HealthCheck)
+	i.Get("/healthcheck", s.healthCheck)
 	// TODO: Add healthcheck/status endpoint
 
 	go func() {
@@ -86,7 +93,7 @@ func (s *Server) Start() {
 	select {}
 }
 
-func (s *Server) HealthCheck(w http.ResponseWriter, r *http.Request) {
+func (s *Server) healthCheck(w http.ResponseWriter, r *http.Request) {
 	// TODO: Maybe in the future check that ES is reachable?
 	fmt.Fprintf(w, "OK")
 }
@@ -98,7 +105,7 @@ func calculateSimplificationThreshold(minZoom, maxZoom, currentZoom int) float64
 	return p*float64(currentZoom-minZoom) + MaxSimplify
 }
 
-func (s *Server) GetVectorTile(w http.ResponseWriter, r *http.Request) {
+func (s *Server) getVectorTile(w http.ResponseWriter, r *http.Request) {
 	featureType := chi.URLParam(r, "featureType")
 	z, _ := strconv.Atoi(chi.URLParam(r, "z"))
 	x, _ := strconv.Atoi(chi.URLParam(r, "x"))
@@ -126,7 +133,7 @@ func (s *Server) GetVectorTile(w http.ResponseWriter, r *http.Request) {
 	Logger.Debugf("ES query for layer [%s] @ (%d, %d, %d) took %s", featureType, x, y, z, esElapsed)
 	if esErr != nil {
 		Logger.Errorf("Failed to do ES query: %+v", esErr)
-		s.HandleError(esErr, w, r)
+		s.handleError(esErr, w, r)
 		return
 	}
 
@@ -158,6 +165,6 @@ func (s *Server) GetVectorTile(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(data)
 }
 
-func (s *Server) HandleError(err error, w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleError(err error, w http.ResponseWriter, r *http.Request) {
 	http.Error(w, err.Error(), http.StatusInternalServerError)
 }
