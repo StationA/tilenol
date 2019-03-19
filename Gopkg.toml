@@ -1,8 +1,4 @@
 [[constraint]]
-  name = "github.com/ddliu/go-httpclient"
-  version = "0.5.1"
-
-[[constraint]]
   name = "github.com/go-chi/chi"
   version = "3.3.2"
 

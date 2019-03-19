@@ -21,14 +21,6 @@
   revision = "2efee857e7cfd4f3d0138cc3cbb1b4966962b93a"
 
 [[projects]]
-  digest = "1:fcabda0be3e3cef964e575eb95eec318f3e50a50585279d6a7117e9945e8ee96"
-  name = "github.com/ddliu/go-httpclient"
-  packages = ["."]
-  pruneopts = "UT"
-  revision = "72917d81d0423a6235790470d15a4d099e3490f9"
-  version = "v0.5.1"
-
-[[projects]]
   digest = "1:a9fe0f8ff72c388d0128e88ce5f3c27d37dcd0950acd7cdb8323555f12463396"
   name = "github.com/go-chi/chi"
   packages = [
@@ -155,7 +147,6 @@
   analyzer-name = "dep"
   analyzer-version = 1
   input-imports = [
-    "github.com/ddliu/go-httpclient",
     "github.com/go-chi/chi",
     "github.com/go-chi/chi/middleware",
     "github.com/go-chi/cors",
