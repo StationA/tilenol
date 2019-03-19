@@ -32,8 +32,8 @@ func buildQuery(geometryField string, extraSources []string, tileBounds orb.Boun
 							"shape": map[string]interface{}{
 								"type": "envelope",
 								"coordinates": [][]float64{
-									[]float64{tileBounds.Left(), tileBounds.Top()},
-									[]float64{tileBounds.Right(), tileBounds.Bottom()},
+									{tileBounds.Left(), tileBounds.Top()},
+									{tileBounds.Right(), tileBounds.Bottom()},
 								},
 							},
 							"relation": "intersects",
@@ -54,13 +54,12 @@ func (s *Server) doQuery(ctx context.Context, index, geometryField string, extra
 	scroll := s.ES.Scroll(index).Body(query).Size(ScrollSize)
 	for {
 		scrollCtx, scrollCancel := context.WithTimeout(ctx, ScrollTimeout)
+		defer scrollCancel()
 		results, err := scroll.Do(scrollCtx)
 		if err == io.EOF {
-			scrollCancel()
 			break
 		}
 		if err != nil {
-			scrollCancel()
 			return nil, err
 		}
 		Logger.Debugf("Scrolling %d hits", len(results.Hits.Hits))
