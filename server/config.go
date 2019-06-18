@@ -34,6 +34,12 @@ func EnableCORS(s *Server) error {
 	return nil
 }
 
+// Simplify shapes enable geometry simplification based on the requested zoom level
+func SimplifyShapes(s *Server) error {
+	s.Simplify = true
+	return nil
+}
+
 // CacheControl sets a fixed string to be used for the Cache-Control HTTP header
 func CacheControl(cacheControl string) ConfigOption {
 	return func(s *Server) error {
