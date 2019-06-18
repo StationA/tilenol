@@ -49,6 +49,11 @@ var (
 		Envar("TILENOL_ENABLE_CORS").
 		Short('x').
 		Bool()
+	simplify = runCmd.
+			Flag("simplify-shapes", "Simplifies geometries based on zoome level").
+			Envar("TILENOL_SIMPLIFY_SHAPES").
+			Short('s').
+			Bool()
 	cache = runCmd.
 		Flag("cache-control", "Sets the \"Cache-Control\" header").
 		Envar("TILENOL_CACHE_CONTROL").
@@ -100,6 +105,9 @@ func main() {
 		opts = append(opts, server.ZoomRanges(*zoomRanges))
 		if *cors {
 			opts = append(opts, server.EnableCORS)
+		}
+		if *simplify {
+			opts = append(opts, server.SimplifyShapes)
 		}
 
 		s, err := server.NewServer(opts...)

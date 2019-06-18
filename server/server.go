@@ -33,6 +33,7 @@ type Server struct {
 	InternalPort uint16
 	EnableCORS   bool
 	CacheControl string
+	Simplify     bool
 	ES           *elastic.Client
 	ESMappings   map[string]string
 	ZoomRanges   map[string][]int
@@ -130,7 +131,7 @@ func (s *Server) getVectorTile(w http.ResponseWriter, r *http.Request) {
 	esStart := time.Now()
 	fc, esErr := s.doQuery(r.Context(), featureType, geometryField, extraSources, tileBounds)
 	esElapsed := time.Since(esStart)
-	Logger.Debugf("ES query for layer [%s] @ (%d, %d, %d) took %s", featureType, x, y, z, esElapsed)
+	Logger.Debugf("ES query for layer [%s] @ (%d, %d, %d) with %d features took %s", featureType, x, y, z, len(fc.Features), esElapsed)
 	if esErr != nil {
 		Logger.Errorf("Failed to do ES query: %+v", esErr)
 		s.handleError(esErr, w, r)
@@ -142,16 +143,19 @@ func (s *Server) getVectorTile(w http.ResponseWriter, r *http.Request) {
 	layer.Version = 2 // Set to tile spec v2
 	layer.ProjectToTile(tile)
 	layer.Clip(mvt.MapboxGLDefaultExtentBound)
-	minZoom := MinZoom
-	maxZoom := MaxZoom
-	zoomRange, hasZoomRange := s.ZoomRanges[featureType]
-	if hasZoomRange {
-		minZoom, maxZoom = zoomRange[0], zoomRange[1]
+
+	if s.Simplify {
+		minZoom := MinZoom
+		maxZoom := MaxZoom
+		zoomRange, hasZoomRange := s.ZoomRanges[featureType]
+		if hasZoomRange {
+			minZoom, maxZoom = zoomRange[0], zoomRange[1]
+		}
+		simplifyThreshold := calculateSimplificationThreshold(minZoom, maxZoom, z)
+		Logger.Debugf("Simplifying @ zoom [%d], epsilon [%f]", z, simplifyThreshold)
+		layer.Simplify(simplify.DouglasPeucker(simplifyThreshold))
+		layer.RemoveEmpty(1.0, 1.0)
 	}
-	simplifyThreshold := calculateSimplificationThreshold(minZoom, maxZoom, z)
-	Logger.Debugf("Simplifying @ zoom [%d], epsilon [%f]", z, simplifyThreshold)
-	layer.Simplify(simplify.DouglasPeucker(simplifyThreshold))
-	layer.RemoveEmpty(1.0, 1.0)
 
 	// Set standard response headers
 	w.Header().Set("Cache-Control", s.CacheControl)
