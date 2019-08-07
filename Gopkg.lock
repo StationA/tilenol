@@ -40,6 +40,22 @@
   version = "v1.0.0"
 
 [[projects]]
+  digest = "1:c950e574951c7199fb3d990d0e7a61996f40f8e646ba7cf8a557878d4c737f53"
+  name = "github.com/go-redis/redis"
+  packages = [
+    ".",
+    "internal",
+    "internal/consistenthash",
+    "internal/hashtag",
+    "internal/pool",
+    "internal/proto",
+    "internal/util",
+  ]
+  pruneopts = "UT"
+  revision = "75795aa4236dc7341eefac3bbe945e68c99ef9df"
+  version = "v6.15.3"
+
+[[projects]]
   digest = "1:d059a146ab350e553c2687d3e17f198eb5b27c7cf55fe6ba0e2d21349df63388"
   name = "github.com/gogo/protobuf"
   packages = ["proto"]
@@ -150,6 +166,7 @@
     "github.com/go-chi/chi",
     "github.com/go-chi/chi/middleware",
     "github.com/go-chi/cors",
+    "github.com/go-redis/redis",
     "github.com/olivere/elastic",
     "github.com/paulmach/orb",
     "github.com/paulmach/orb/encoding/mvt",

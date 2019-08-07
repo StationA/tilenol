@@ -4,6 +4,9 @@ COMMITISH := `git describe --always 2>/dev/null`
 deps:
 	dep ensure
 
+format:
+	go fmt ./...
+
 build: deps
 	go build -o target/tilenol -ldflags="-X main.Version=${VERSION} -X main.Commitish=${COMMITISH}" ./cmd/...
 

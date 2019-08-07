@@ -41,19 +41,24 @@ usage: tilenol run [<flags>]
 Runs the Tilenol server
 
 Flags:
-      --help                Show context-sensitive help (also try --help-long and --help-man).
+      --help                 Show context-sensitive help (also try --help-long and --help-man).
+  -d, --debug                Enable debug mode
   -e, --es-host="localhost:9200"
-                            ElasticSearch host-port
+                             ElasticSearch host-port
   -m, --es-mappings=_all=geometry ...
-                            ElasticSearch index name to geo-field mappings
+                             ElasticSearch index name to geo-field mappings
   -Z, --zoom-ranges=_all=0-18 ...
-                            ElasticSearch index name to zoom range mappings
-  -p, --port=3000           Port to serve tiles on
-  -i, --internal-port=3001  Port for internal metrics and healthchecks
-  -x, --enable-cors         Enables cross-origin resource sharing (CORS)
+                             ElasticSearch index name to zoom range mappings
+  -p, --port=3000            Port to serve tiles on
+  -i, --internal-port=3001   Port for internal metrics and healthchecks
+  -x, --enable-cors          Enables cross-origin resource sharing (CORS)
+  -s, --simplify-shapes      Simplifies geometries based on zoom level
   -c, --cache-control="no-cache"
-                            Sets the "Cache-Control" header
-  -n, --num-processes=0     Sets the number of processes to be used
+                             Sets the "Cache-Control" header
+  -C, --cache-server-address=CACHE-SERVER-ADDRESS
+                             Enables caching using Redis
+  -t, --cache-ttl=CACHE-TTL  Sets the time-to-live for Redis
+  -n, --num-processes=0      Sets the number of processes to be used
 ```
 
 ## Contributing

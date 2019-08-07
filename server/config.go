@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-redis/redis"
 	"github.com/olivere/elastic"
 )
 
@@ -44,6 +45,33 @@ func SimplifyShapes(s *Server) error {
 func CacheControl(cacheControl string) ConfigOption {
 	return func(s *Server) error {
 		s.CacheControl = cacheControl
+		return nil
+	}
+}
+
+// CacheServer sets an address to be used to connect to a Redis Cache Server
+func CacheServer(cacheServer string) ConfigOption {
+	return func(s *Server) error {
+		if cacheServer != "" {
+			s.CacheClient = redis.NewClient(&redis.Options{
+				Addr: cacheServer,
+			})
+		}
+		return nil
+	}
+}
+
+// CacheTTL sets the time-to-live for Redis
+func CacheTTL(cacheTTLString string) ConfigOption {
+	return func(s *Server) error {
+		if cacheTTLString == "" {
+			return nil
+		}
+		cacheTTL, err := time.ParseDuration(cacheTTLString)
+		if err != nil {
+			return err
+		}
+		s.CacheTTL = cacheTTL
 		return nil
 	}
 }

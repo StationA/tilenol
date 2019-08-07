@@ -1,7 +1,9 @@
 package server
 
 import (
+	"bytes"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"strconv"
@@ -10,6 +12,7 @@ import (
 	"github.com/go-chi/chi"
 	"github.com/go-chi/chi/middleware"
 	"github.com/go-chi/cors"
+	"github.com/go-redis/redis"
 	"github.com/olivere/elastic"
 	"github.com/paulmach/orb/encoding/mvt"
 	"github.com/paulmach/orb/maptile"
@@ -33,6 +36,8 @@ type Server struct {
 	InternalPort uint16
 	EnableCORS   bool
 	CacheControl string
+	CacheClient  *redis.Client
+	CacheTTL     time.Duration
 	Simplify     bool
 	ES           *elastic.Client
 	ESMappings   map[string]string
@@ -73,7 +78,7 @@ func (s *Server) Start() {
 	}
 
 	//-- ROUTES
-	r.Get("/{featureType}/{z}/{x}/{y}.mvt", s.getVectorTile)
+	r.Get("/{featureType}/{z}/{x}/{y}.mvt", s.cached(s.getVectorTile))
 
 	// TODO: Add GeoJSON endpoint?
 
@@ -106,7 +111,52 @@ func calculateSimplificationThreshold(minZoom, maxZoom, currentZoom int) float64
 	return p*float64(currentZoom-minZoom) + MaxSimplify
 }
 
-func (s *Server) getVectorTile(w http.ResponseWriter, r *http.Request) {
+func (s *Server) cached(handler func(io.Writer, *http.Request)) func(http.ResponseWriter, *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if err := recover(); err != nil {
+				s.handleError(err.(error), w, r)
+			}
+		}()
+
+		// Set standard response headers
+		// TODO: Use the cache TTL to determine the Cache-Control
+		w.Header().Set("Cache-Control", s.CacheControl)
+		w.Header().Set("Content-Encoding", "gzip")
+		// TODO: Store the content type somehow in the cache?
+		w.Header().Set("Content-Type", "application/x-protobuf")
+
+		key := r.URL.RequestURI()
+		val, err := s.CacheClient.Get(key).Bytes()
+		if err == redis.Nil {
+			Logger.Debugf("Key [%s] is not cached", key)
+			var buffer bytes.Buffer
+			handler(&buffer, r)
+			err := s.CacheClient.Set(key, buffer.Bytes(), s.CacheTTL).Err()
+			if err != nil {
+				// Log an error in case the key can't be stored in Redis, but continue
+				Logger.Errorf("Could not store key [%s] in cache: %v", key, err)
+			}
+			_, err = io.Copy(w, &buffer)
+			if err != nil {
+				panic(err)
+			}
+		} else if err != nil {
+			// Log an error in case the connection to Redis fails, but recompute the response
+			Logger.Errorf("Could not talk to Redis: %v", err)
+			handler(w, r)
+		} else {
+			Logger.Debugf("Key [%s] found in cache", key)
+			buffer := bytes.NewBuffer(val)
+			_, err := io.Copy(w, buffer)
+			if err != nil {
+				panic(err)
+			}
+		}
+	}
+}
+
+func (s *Server) getVectorTile(w io.Writer, r *http.Request) {
 	featureType := chi.URLParam(r, "featureType")
 	z, _ := strconv.Atoi(chi.URLParam(r, "z"))
 	x, _ := strconv.Atoi(chi.URLParam(r, "x"))
@@ -134,8 +184,7 @@ func (s *Server) getVectorTile(w http.ResponseWriter, r *http.Request) {
 	Logger.Debugf("ES query for layer [%s] @ (%d, %d, %d) with %d features took %s", featureType, x, y, z, len(fc.Features), esElapsed)
 	if esErr != nil {
 		Logger.Errorf("Failed to do ES query: %+v", esErr)
-		s.handleError(esErr, w, r)
-		return
+		panic(esErr)
 	}
 
 	// TODO: Allow for multi-layer queries
@@ -157,10 +206,6 @@ func (s *Server) getVectorTile(w http.ResponseWriter, r *http.Request) {
 		layer.RemoveEmpty(1.0, 1.0)
 	}
 
-	// Set standard response headers
-	w.Header().Set("Cache-Control", s.CacheControl)
-	w.Header().Set("Content-Encoding", "gzip")
-	w.Header().Set("Content-Type", "application/x-protobuf")
 	// Lastly, marshal the object into the response output
 	data, marshalErr := mvt.MarshalGzipped(mvt.Layers{layer})
 	if marshalErr != nil {
