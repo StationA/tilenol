@@ -50,16 +50,26 @@ var (
 		Short('x').
 		Bool()
 	simplify = runCmd.
-			Flag("simplify-shapes", "Simplifies geometries based on zoome level").
+			Flag("simplify-shapes", "Simplifies geometries based on zoom level").
 			Envar("TILENOL_SIMPLIFY_SHAPES").
 			Short('s').
 			Bool()
+	cacheControl = runCmd.
+			Flag("cache-control", "Sets the \"Cache-Control\" header").
+			Envar("TILENOL_CACHE_CONTROL").
+			Short('c').
+			Default("no-cache").
+			String()
 	cache = runCmd.
-		Flag("cache-control", "Sets the \"Cache-Control\" header").
-		Envar("TILENOL_CACHE_CONTROL").
-		Short('c').
-		Default("no-cache").
+		Flag("cache-server-address", "Enables caching using Redis").
+		Envar("TILENOL_CACHE_SERVER_ADDRESS").
+		Short('C').
 		String()
+	cacheTTL = runCmd.
+			Flag("cache-ttl", "Sets the time-to-live for Redis").
+			Envar("TILENOL_CACHE_TTL").
+			Short('t').
+			String()
 	numProcs = runCmd.
 			Flag("num-processes", "Sets the number of processes to be used").
 			Envar("TILENOL_NUM_PROCESSES").
@@ -99,7 +109,9 @@ func main() {
 		var opts []server.ConfigOption
 		opts = append(opts, server.Port(*port))
 		opts = append(opts, server.InternalPort(*internalPort))
-		opts = append(opts, server.CacheControl(*cache))
+		opts = append(opts, server.CacheControl(*cacheControl))
+		opts = append(opts, server.CacheServer(*cache))
+		opts = append(opts, server.CacheTTL(*cacheTTL))
 		opts = append(opts, server.ESHost(*esHost))
 		opts = append(opts, server.ESMappings(*esMap))
 		opts = append(opts, server.ZoomRanges(*zoomRanges))
