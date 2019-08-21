@@ -5,7 +5,7 @@ import (
 	"runtime"
 
 	"github.com/sirupsen/logrus"
-	"github.com/stationa/tilenol/server"
+	"github.com/stationa/tilenol"
 	"gopkg.in/alecthomas/kingpin.v2"
 )
 
@@ -77,21 +77,21 @@ func main() {
 	switch cmd {
 	case runCmd.FullCommand():
 		if *debug {
-			server.Logger.SetLevel(logrus.DebugLevel)
+			tilenol.Logger.SetLevel(logrus.DebugLevel)
 		}
 
-		var opts []server.ConfigOption
-		opts = append(opts, server.Port(*port))
-		opts = append(opts, server.InternalPort(*internalPort))
-		opts = append(opts, server.ConfigFile(*configFile))
+		var opts []tilenol.ConfigOption
+		opts = append(opts, tilenol.Port(*port))
+		opts = append(opts, tilenol.InternalPort(*internalPort))
+		opts = append(opts, tilenol.ConfigFile(*configFile))
 		if *cors {
-			opts = append(opts, server.EnableCORS)
+			opts = append(opts, tilenol.EnableCORS)
 		}
 		if *simplify {
-			opts = append(opts, server.SimplifyShapes)
+			opts = append(opts, tilenol.SimplifyShapes)
 		}
 
-		s, err := server.NewServer(opts...)
+		s, err := tilenol.NewServer(opts...)
 		if err != nil {
 			panic(err)
 		}

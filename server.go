@@ -1,4 +1,4 @@
-package server
+package tilenol
 
 import (
 	"bytes"
@@ -8,12 +8,11 @@ import (
 	"log"
 	"net/http"
 	"strconv"
-	"time"
+	"strings"
 
 	"github.com/go-chi/chi"
 	"github.com/go-chi/chi/middleware"
 	"github.com/go-chi/cors"
-	"github.com/go-redis/redis"
 	"github.com/paulmach/orb/encoding/mvt"
 	"github.com/paulmach/orb/maptile"
 	"github.com/paulmach/orb/simplify"
@@ -29,6 +28,8 @@ const (
 	MinSimplify = 1.0
 	// MaxSimplify is the maximum simplification radius
 	MaxSimplify = 10.0
+	// AllLayers is the special request parameter for returning all source layers
+	AllLayers = "_all"
 )
 
 // Server is a tilenol server instance
@@ -36,10 +37,9 @@ type Server struct {
 	Port         uint16
 	InternalPort uint16
 	EnableCORS   bool
-	CacheClient  *redis.Client
-	CacheTTL     time.Duration
-	Layers       []Layer
 	Simplify     bool
+	Layers       []Layer
+	Cache        Cache
 }
 
 // NewServer creates a new server instance pre-configured with the given ConfigOption's
@@ -76,7 +76,7 @@ func (s *Server) Start() {
 	}
 
 	//-- ROUTES
-	r.Get("/{z}/{x}/{y}.mvt", s.cached(s.getVectorTile))
+	r.Get("/{layers}/{z}/{x}/{y}.mvt", s.cached(s.getVectorTile))
 
 	// TODO: Add GeoJSON endpoint?
 
@@ -118,67 +118,81 @@ func (s *Server) cached(handler func(io.Writer, *http.Request)) func(http.Respon
 
 		// Set standard response headers
 		// TODO: Use the cache TTL to determine the Cache-Control
-		w.Header().Set("Cache-Control", "no-cache")
+		w.Header().Set("Cache-Control", "max-age=86400")
 		w.Header().Set("Content-Encoding", "gzip")
 		// TODO: Store the content type somehow in the cache?
 		w.Header().Set("Content-Type", "application/x-protobuf")
 
-		key := r.URL.RequestURI()
-		val, err := s.CacheClient.Get(key).Bytes()
-		if err == redis.Nil {
-			Logger.Debugf("Key [%s] is not cached", key)
-			var buffer bytes.Buffer
-			handler(&buffer, r)
-			err := s.CacheClient.Set(key, buffer.Bytes(), s.CacheTTL).Err()
-			if err != nil {
-				// Log an error in case the key can't be stored in Redis, but continue
-				Logger.Errorf("Could not store key [%s] in cache: %v", key, err)
+		if s.Cache != nil {
+			key := r.URL.RequestURI()
+			if s.Cache.Exists(key) {
+				Logger.Debugf("Key [%s] found in cache", key)
+				val, err := s.Cache.Get(key)
+				if err != nil {
+					panic(err)
+				}
+				buffer := bytes.NewBuffer(val)
+				io.Copy(w, buffer)
+			} else {
+				Logger.Debugf("Key [%s] is not cached", key)
+				var buffer bytes.Buffer
+				handler(&buffer, r)
+				err := s.Cache.Put(key, buffer.Bytes())
+				if err != nil {
+					// Log an error in case the key can't be stored in cache, but continue
+					Logger.Errorf("Could not store key [%s] in cache: %v", key, err)
+				}
+				_, err = io.Copy(w, &buffer)
 			}
-			_, err = io.Copy(w, &buffer)
-			if err != nil {
-				panic(err)
-			}
-		} else if err != nil {
-			// Log an error in case the connection to Redis fails, but recompute the response
-			Logger.Errorf("Could not talk to Redis: %v", err)
-			handler(w, r)
 		} else {
-			Logger.Debugf("Key [%s] found in cache", key)
-			buffer := bytes.NewBuffer(val)
-			_, err := io.Copy(w, buffer)
-			if err != nil {
-				panic(err)
-			}
+			handler(w, r)
 		}
 	}
 }
 
-func (s *Server) getLayersForZoom(z int) []Layer {
-	var layers []Layer
-	for _, layer := range s.Layers {
-		if layer.Minzoom <= z && (layer.Maxzoom >= z || layer.Maxzoom == 0) {
-			layers = append(layers, layer)
+func filterLayersByNames(inLayers []Layer, names []string) []Layer {
+	var outLayers []Layer
+	for _, name := range names {
+		for _, layer := range inLayers {
+			if layer.Name == name {
+				outLayers = append(outLayers, layer)
+			}
 		}
 	}
-	return layers
+	return outLayers
+}
+
+func filterLayersByZoom(inLayers []Layer, z int) []Layer {
+	var outLayers []Layer
+	for _, layer := range inLayers {
+		if layer.Minzoom <= z && (layer.Maxzoom >= z || layer.Maxzoom == 0) {
+			outLayers = append(outLayers, layer)
+		}
+	}
+	return outLayers
 }
 
 func (s *Server) getVectorTile(w io.Writer, r *http.Request) {
 	z, _ := strconv.Atoi(chi.URLParam(r, "z"))
 	x, _ := strconv.Atoi(chi.URLParam(r, "x"))
 	y, _ := strconv.Atoi(chi.URLParam(r, "y"))
+	requestedLayers := chi.URLParam(r, "layers")
 	tile := maptile.New(uint32(x), uint32(y), maptile.Zoom(z))
+
+	var layersToCompute = filterLayersByZoom(s.Layers, z)
+	if requestedLayers != AllLayers {
+		layersToCompute = filterLayersByNames(layersToCompute, strings.Split(requestedLayers, ","))
+	}
 
 	eg, ectx := errgroup.WithContext(r.Context())
 	ctx := context.WithValue(ectx, "tile", tile)
 
-	layersToCompute := s.getLayersForZoom(z)
 	fcLayers := make(mvt.Layers, len(layersToCompute))
 	for i, layer := range layersToCompute {
 		i, layer := i, layer // Fun stuff: https://blog.cloudflare.com/a-go-gotcha-when-closures-and-goroutines-collide/
 		eg.Go(func() error {
 			Logger.Debugf("Retrieving vector tile for layer [%s] @ (%d, %d, %d)", layer.Name, x, y, z)
-			fc, err := layer.GetFeatures(ctx)
+			fc, err := layer.Source.GetFeatures(ctx)
 			if err != nil {
 				return err
 			}

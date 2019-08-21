@@ -1,0 +1,15 @@
+# Uncomment to enable Redis-based caching
+# cache:
+#   redis:
+#     host: localhost
+#     port: 6379
+#     ttl: 24h
+layers:
+    - name: buildings
+      minzoom: 10
+      source:
+        elasticsearch:
+          host: localhost
+          port: 9200
+          index: buildings
+          geometryField: geometry

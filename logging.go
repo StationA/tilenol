@@ -1,4 +1,4 @@
-package server
+package tilenol
 
 import (
 	"github.com/sirupsen/logrus"
