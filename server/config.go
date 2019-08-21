@@ -1,17 +1,76 @@
 package server
 
 import (
-	"fmt"
-	"strconv"
-	"strings"
-	"time"
+	"os"
 
 	"github.com/go-redis/redis"
-	"github.com/olivere/elastic"
+	"gopkg.in/go-yaml/yaml.v2"
 )
+
+type CacheConfig struct {
+	ServerAddress string `yaml:"serverAddress"`
+}
+
+type ElasticsearchConfig struct {
+	Host          string            `yaml:"host"`
+	Port          int               `yaml:"port"`
+	Index         string            `yaml:"index"`
+	GeometryField string            `yaml:"geometryField"`
+	SourceFields  map[string]string `yaml:"sourceFields"`
+}
+
+type LayerConfig struct {
+	Name          string               `yaml:"name"`
+	Description   string               `yaml:"description"`
+	Minzoom       int                  `yaml:"minzoom"`
+	Maxzoom       int                  `yaml:"maxzoom"`
+	Elasticsearch *ElasticsearchConfig `yaml:"elasticsearch"`
+}
+
+type Config struct {
+	Cache  *CacheConfig  `yaml:"cache"`
+	Layers []LayerConfig `yaml:"layers"`
+}
+
+func LoadConfig(configFile *os.File) (*Config, error) {
+	dec := yaml.NewDecoder(configFile)
+	dec.SetStrict(true)
+	var config Config
+	err := dec.Decode(&config)
+	if err != nil {
+		return nil, err
+	}
+	Logger.Debugf("Loaded config: %+v", config)
+	return &config, nil
+}
 
 // ConfigOption is a function that changes a configuration setting of the server.Server
 type ConfigOption func(s *Server) error
+
+// ConfigFile loads a YAML configuration file from disk to set up the server
+func ConfigFile(configFile *os.File) ConfigOption {
+	return func(s *Server) error {
+		config, err := LoadConfig(configFile)
+		if err != nil {
+			return err
+		}
+		if config.Cache != nil {
+			s.CacheClient = redis.NewClient(&redis.Options{
+				Addr: config.Cache.ServerAddress,
+			})
+		}
+		var layers []Layer
+		for _, layerConfig := range config.Layers {
+			layer, err := CreateLayer(layerConfig)
+			if err != nil {
+				return err
+			}
+			layers = append(layers, *layer)
+		}
+		s.Layers = layers
+		return nil
+	}
+}
 
 // Port hanges the port number used for serving tile data
 func Port(port uint16) ConfigOption {
@@ -41,6 +100,7 @@ func SimplifyShapes(s *Server) error {
 	return nil
 }
 
+const NOTHING = `
 // CacheControl sets a fixed string to be used for the Cache-Control HTTP header
 func CacheControl(cacheControl string) ConfigOption {
 	return func(s *Server) error {
@@ -117,4 +177,4 @@ func ZoomRanges(strZoomRanges map[string]string) ConfigOption {
 		s.ZoomRanges = zoomRanges
 		return nil
 	}
-}
+}`

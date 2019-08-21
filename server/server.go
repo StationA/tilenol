@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"log"
@@ -13,10 +14,10 @@ import (
 	"github.com/go-chi/chi/middleware"
 	"github.com/go-chi/cors"
 	"github.com/go-redis/redis"
-	"github.com/olivere/elastic"
 	"github.com/paulmach/orb/encoding/mvt"
 	"github.com/paulmach/orb/maptile"
 	"github.com/paulmach/orb/simplify"
+	"golang.org/x/sync/errgroup"
 )
 
 const (
@@ -35,13 +36,10 @@ type Server struct {
 	Port         uint16
 	InternalPort uint16
 	EnableCORS   bool
-	CacheControl string
 	CacheClient  *redis.Client
 	CacheTTL     time.Duration
+	Layers       []Layer
 	Simplify     bool
-	ES           *elastic.Client
-	ESMappings   map[string]string
-	ZoomRanges   map[string][]int
 }
 
 // NewServer creates a new server instance pre-configured with the given ConfigOption's
@@ -78,13 +76,12 @@ func (s *Server) Start() {
 	}
 
 	//-- ROUTES
-	r.Get("/{featureType}/{z}/{x}/{y}.mvt", s.cached(s.getVectorTile))
+	r.Get("/{z}/{x}/{y}.mvt", s.cached(s.getVectorTile))
 
 	// TODO: Add GeoJSON endpoint?
 
 	i := chi.NewRouter()
 	i.Get("/healthcheck", s.healthCheck)
-	// TODO: Add healthcheck/status endpoint
 
 	go func() {
 		log.Fatalln(http.ListenAndServe(fmt.Sprintf(":%d", s.Port), r))
@@ -121,7 +118,7 @@ func (s *Server) cached(handler func(io.Writer, *http.Request)) func(http.Respon
 
 		// Set standard response headers
 		// TODO: Use the cache TTL to determine the Cache-Control
-		w.Header().Set("Cache-Control", s.CacheControl)
+		w.Header().Set("Cache-Control", "no-cache")
 		w.Header().Set("Content-Encoding", "gzip")
 		// TODO: Store the content type somehow in the cache?
 		w.Header().Set("Content-Type", "application/x-protobuf")
@@ -156,58 +153,58 @@ func (s *Server) cached(handler func(io.Writer, *http.Request)) func(http.Respon
 	}
 }
 
+func (s *Server) getLayersForZoom(z int) []Layer {
+	var layers []Layer
+	for _, layer := range s.Layers {
+		if layer.Minzoom <= z && (layer.Maxzoom >= z || layer.Maxzoom == 0) {
+			layers = append(layers, layer)
+		}
+	}
+	return layers
+}
+
 func (s *Server) getVectorTile(w io.Writer, r *http.Request) {
-	featureType := chi.URLParam(r, "featureType")
 	z, _ := strconv.Atoi(chi.URLParam(r, "z"))
 	x, _ := strconv.Atoi(chi.URLParam(r, "x"))
 	y, _ := strconv.Atoi(chi.URLParam(r, "y"))
-
-	Logger.Debugf("Retrieving vector tile for layer [%s] @ (%d, %d, %d)", featureType, x, y, z)
-
-	geometryField, hasGeometryField := s.ESMappings[featureType]
-	if !hasGeometryField {
-		geometryField = "geometry"
-	}
-	Logger.Debugf("Using geometry field [%s]", geometryField)
-
-	extraSources, hasExtraSources := r.URL.Query()["source"]
-	if hasExtraSources {
-		Logger.Debugf("Requesting additional source fields [%s]", extraSources)
-	}
-
-	// Convert x,y,z into lat-lon bounds for ES query construction
 	tile := maptile.New(uint32(x), uint32(y), maptile.Zoom(z))
-	tileBounds := tile.Bound()
-	esStart := time.Now()
-	fc, esErr := s.doQuery(r.Context(), featureType, geometryField, extraSources, tileBounds)
-	esElapsed := time.Since(esStart)
-	Logger.Debugf("ES query for layer [%s] @ (%d, %d, %d) with %d features took %s", featureType, x, y, z, len(fc.Features), esElapsed)
-	if esErr != nil {
-		Logger.Errorf("Failed to do ES query: %+v", esErr)
-		panic(esErr)
+
+	eg, ectx := errgroup.WithContext(r.Context())
+	ctx := context.WithValue(ectx, "tile", tile)
+
+	layersToCompute := s.getLayersForZoom(z)
+	fcLayers := make(mvt.Layers, len(layersToCompute))
+	for i, layer := range layersToCompute {
+		i, layer := i, layer // Fun stuff: https://blog.cloudflare.com/a-go-gotcha-when-closures-and-goroutines-collide/
+		eg.Go(func() error {
+			Logger.Debugf("Retrieving vector tile for layer [%s] @ (%d, %d, %d)", layer.Name, x, y, z)
+			fc, err := layer.GetFeatures(ctx)
+			if err != nil {
+				return err
+			}
+			fcLayer := mvt.NewLayer(layer.Name, fc)
+			fcLayer.Version = 2 // Set to tile spec v2
+			fcLayer.ProjectToTile(tile)
+			fcLayer.Clip(mvt.MapboxGLDefaultExtentBound)
+
+			if s.Simplify {
+				minZoom := layer.Minzoom
+				maxZoom := layer.Maxzoom
+				simplifyThreshold := calculateSimplificationThreshold(minZoom, maxZoom, z)
+				Logger.Debugf("Simplifying @ zoom [%d], epsilon [%f]", z, simplifyThreshold)
+				fcLayer.Simplify(simplify.DouglasPeucker(simplifyThreshold))
+				fcLayer.RemoveEmpty(1.0, 1.0)
+			}
+			fcLayers[i] = fcLayer
+			return nil
+		})
 	}
-
-	// TODO: Allow for multi-layer queries
-	layer := mvt.NewLayer(featureType, fc)
-	layer.Version = 2 // Set to tile spec v2
-	layer.ProjectToTile(tile)
-	layer.Clip(mvt.MapboxGLDefaultExtentBound)
-
-	if s.Simplify {
-		minZoom := MinZoom
-		maxZoom := MaxZoom
-		zoomRange, hasZoomRange := s.ZoomRanges[featureType]
-		if hasZoomRange {
-			minZoom, maxZoom = zoomRange[0], zoomRange[1]
-		}
-		simplifyThreshold := calculateSimplificationThreshold(minZoom, maxZoom, z)
-		Logger.Debugf("Simplifying @ zoom [%d], epsilon [%f]", z, simplifyThreshold)
-		layer.Simplify(simplify.DouglasPeucker(simplifyThreshold))
-		layer.RemoveEmpty(1.0, 1.0)
+	if err := eg.Wait(); err != nil {
+		panic(err)
 	}
 
 	// Lastly, marshal the object into the response output
-	data, marshalErr := mvt.MarshalGzipped(mvt.Layers{layer})
+	data, marshalErr := mvt.MarshalGzipped(fcLayers)
 	if marshalErr != nil {
 		// TODO: Handle error
 	}
@@ -215,5 +212,7 @@ func (s *Server) getVectorTile(w io.Writer, r *http.Request) {
 }
 
 func (s *Server) handleError(err error, w http.ResponseWriter, r *http.Request) {
+	Logger.Errorf("Tile request failed: %v", err)
+
 	http.Error(w, err.Error(), http.StatusInternalServerError)
 }

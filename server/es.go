@@ -8,8 +8,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/olivere/elastic"
 	"github.com/paulmach/orb"
 	"github.com/paulmach/orb/geojson"
+	"github.com/paulmach/orb/maptile"
 )
 
 const (
@@ -21,8 +23,40 @@ const (
 	ScrollTimeout = time.Minute
 )
 
-func buildQuery(geometryField string, extraSources []string, tileBounds orb.Bound) interface{} {
-	sourceParam := append(extraSources, geometryField)
+type ElasticsearchSource struct {
+	ES            *elastic.Client
+	Index         string
+	GeometryField string
+	SourceFields  map[string]string
+}
+
+func NewElasticsearchSource(config *ElasticsearchConfig) (Source, error) {
+	es, err := elastic.NewClient(
+		elastic.SetURL(fmt.Sprintf("http://%s:%d", config.Host, config.Port)),
+		elastic.SetGzip(true),
+		// TODO: Should this be configurable?
+		elastic.SetHealthcheckTimeoutStartup(30*time.Second),
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &ElasticsearchSource{
+		ES:            es,
+		Index:         config.Index,
+		GeometryField: config.GeometryField,
+		SourceFields:  config.SourceFields,
+	}, nil
+}
+
+func (e *ElasticsearchSource) getSourceFields() []string {
+	fields := []string{e.GeometryField}
+	for _, v := range e.SourceFields {
+		fields = append(fields, v)
+	}
+	return fields
+}
+
+func (e *ElasticsearchSource) buildQuery(tileBounds orb.Bound) interface{} {
 	return map[string]interface{}{
 		"query": map[string]interface{}{
 			"bool": map[string]interface{}{
@@ -31,7 +65,7 @@ func buildQuery(geometryField string, extraSources []string, tileBounds orb.Boun
 				},
 				"filter": map[string]interface{}{
 					"geo_shape": map[string]interface{}{
-						geometryField: map[string]interface{}{
+						e.GeometryField: map[string]interface{}{
 							"shape": map[string]interface{}{
 								"type": "envelope",
 								"coordinates": [][]float64{
@@ -45,16 +79,20 @@ func buildQuery(geometryField string, extraSources []string, tileBounds orb.Boun
 				},
 			},
 		},
-		"_source": sourceParam,
+		"_source": e.getSourceFields(),
 	}
 }
 
-func (s *Server) doQuery(ctx context.Context, index, geometryField string, extraSources []string, tileBounds orb.Bound) (*geojson.FeatureCollection, error) {
+func (e *ElasticsearchSource) GetFeatures(ctx context.Context) (*geojson.FeatureCollection, error) {
+	tile := ctx.Value("tile").(maptile.Tile)
+	tileBounds := tile.Bound()
+
 	fc := geojson.NewFeatureCollection()
 
-	query := buildQuery(geometryField, extraSources, tileBounds)
+	query := e.buildQuery(tileBounds)
+	Logger.Debugf("Built ES query: %v", query)
 
-	scroll := s.ES.Scroll(index).Body(query).Size(ScrollSize)
+	scroll := e.ES.Scroll(e.Index).Body(query).Size(ScrollSize)
 	for {
 		scrollCtx, scrollCancel := context.WithTimeout(ctx, ScrollTimeout)
 		defer scrollCancel()
@@ -74,12 +112,12 @@ func (s *Server) doQuery(ctx context.Context, index, geometryField string, extra
 				return nil, err
 			}
 			// Extract geometry value (potentially nested in the source)
-			geometryFieldParts := strings.Split(geometryField, ".")
+			geometryFieldParts := strings.Split(e.GeometryField, ".")
 			numParts := len(geometryFieldParts)
 			lastPart := geometryFieldParts[numParts-1]
 			parent, found := GetNested(source, geometryFieldParts[0:numParts-1])
 			if !found {
-				return nil, fmt.Errorf("Couldn't find geometry at field: %s", geometryField)
+				return nil, fmt.Errorf("Couldn't find geometry at field: %s", e.GeometryField)
 			}
 			parentMap := parent.(map[string]interface{})
 			geometry := parentMap[lastPart]
@@ -90,9 +128,16 @@ func (s *Server) doQuery(ctx context.Context, index, geometryField string, extra
 			feat := geojson.NewFeature(geom.Geometry())
 			feat.ID = id
 			feat.Properties = make(map[string]interface{})
-			flatten(source["properties"], feat.Properties)
-			delete(source, "properties")
-			flatten(source, feat.Properties)
+			for prop, fieldName := range e.SourceFields {
+				Logger.Debugf("Mapping %s -> %s", prop, fieldName)
+				val, found := GetNested(source, strings.Split(fieldName, "."))
+				if found {
+					feat.Properties[prop] = val
+				}
+			}
+			// flatten(source["properties"], feat.Properties)
+			// delete(source, "properties")
+			// flatten(source, feat.Properties)
 			feat.Properties["id"] = id
 			Logger.Debugf("Adding feature to layer: %+v", feat)
 			fc.Append(feat)
@@ -137,3 +182,28 @@ func GetNested(something interface{}, keyParts []string) (interface{}, bool) {
 	}
 	return nil, false
 }
+
+const stuff = `
+		geometryField, hasGeometryField := s.ESMappings[featureType]
+		if !hasGeometryField {
+			geometryField = "geometry"
+		}
+		Logger.Debugf("Using geometry field [%s]", geometryField)
+
+		extraSources, hasExtraSources := r.URL.Query()["source"]
+		if hasExtraSources {
+			Logger.Debugf("Requesting additional source fields [%s]", extraSources)
+		}
+
+		// Convert x,y,z into lat-lon bounds for ES query construction
+		tileBounds := tile.Bound()
+		esStart := time.Now()
+		fc, esErr := s.doQuery(r.Context(), featureType, geometryField, extraSources, tileBounds)
+		esElapsed := time.Since(esStart)
+		Logger.Debugf("ES query for layer [%s] @ (%d, %d, %d) with %d features took %s", featureType, x, y, z, len(fc.Features), esElapsed)
+		if esErr != nil {
+			Logger.Errorf("Failed to do ES query: %+v", esErr)
+			panic(esErr)
+		}
+
+`
