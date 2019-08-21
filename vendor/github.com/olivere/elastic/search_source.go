@@ -26,7 +26,7 @@ type SearchSource struct {
 	timeout                  string
 	terminateAfter           *int
 	storedFieldNames         []string
-	docvalueFields           []string
+	docvalueFields           DocvalueFields
 	scriptFields             []*ScriptField
 	fetchSourceContext       *FetchSourceContext
 	aggregations             map[string]Aggregation
@@ -78,7 +78,7 @@ func (s *SearchSource) PostFilter(postFilter Query) *SearchSource {
 // Slice allows partitioning the documents in multiple slices.
 // It is e.g. used to slice a scroll operation, supported in
 // Elasticsearch 5.0 or later.
-// See https://www.elastic.co/guide/en/elasticsearch/reference/6.2/search-request-scroll.html#sliced-scroll
+// See https://www.elastic.co/guide/en/elasticsearch/reference/6.8/search-request-scroll.html#sliced-scroll
 // for details.
 func (s *SearchSource) Slice(sliceQuery Query) *SearchSource {
 	s.sliceQuery = sliceQuery
@@ -169,7 +169,7 @@ func (s *SearchSource) TrackScores(trackScores bool) *SearchSource {
 // TrackTotalHits indicates if the total hit count for the query should be tracked.
 // Defaults to true.
 //
-// See https://www.elastic.co/guide/en/elasticsearch/reference/6.3/index-modules-index-sorting.html#early-terminate
+// See https://www.elastic.co/guide/en/elasticsearch/reference/6.8/index-modules-index-sorting.html#early-terminate
 // for details.
 func (s *SearchSource) TrackTotalHits(trackTotalHits bool) *SearchSource {
 	s.trackTotalHits = &trackTotalHits
@@ -179,7 +179,7 @@ func (s *SearchSource) TrackTotalHits(trackTotalHits bool) *SearchSource {
 // SearchAfter allows a different form of pagination by using a live cursor,
 // using the results of the previous page to help the retrieval of the next.
 //
-// See https://www.elastic.co/guide/en/elasticsearch/reference/6.2/search-request-search-after.html
+// See https://www.elastic.co/guide/en/elasticsearch/reference/6.8/search-request-search-after.html
 func (s *SearchSource) SearchAfter(sortValues ...interface{}) *SearchSource {
 	s.searchAfterSortValues = append(s.searchAfterSortValues, sortValues...)
 	return s
@@ -290,13 +290,29 @@ func (s *SearchSource) StoredFields(storedFieldNames ...string) *SearchSource {
 // DocvalueField adds a single field to load from the field data cache
 // and return as part of the search request.
 func (s *SearchSource) DocvalueField(fieldDataField string) *SearchSource {
-	s.docvalueFields = append(s.docvalueFields, fieldDataField)
+	s.docvalueFields = append(s.docvalueFields, DocvalueField{Field: fieldDataField})
+	return s
+}
+
+// DocvalueField adds a single docvalue field to load from the field data cache
+// and return as part of the search request.
+func (s *SearchSource) DocvalueFieldWithFormat(fieldDataFieldWithFormat DocvalueField) *SearchSource {
+	s.docvalueFields = append(s.docvalueFields, fieldDataFieldWithFormat)
 	return s
 }
 
 // DocvalueFields adds one or more fields to load from the field data cache
 // and return as part of the search request.
 func (s *SearchSource) DocvalueFields(docvalueFields ...string) *SearchSource {
+	for _, f := range docvalueFields {
+		s.docvalueFields = append(s.docvalueFields, DocvalueField{Field: f})
+	}
+	return s
+}
+
+// DocvalueFields adds one or more docvalue fields to load from the field data cache
+// and return as part of the search request.
+func (s *SearchSource) DocvalueFieldsWithFormat(docvalueFields ...DocvalueField) *SearchSource {
 	s.docvalueFields = append(s.docvalueFields, docvalueFields...)
 	return s
 }
@@ -396,7 +412,11 @@ func (s *SearchSource) Source() (interface{}, error) {
 		}
 	}
 	if len(s.docvalueFields) > 0 {
-		source["docvalue_fields"] = s.docvalueFields
+		src, err := s.docvalueFields.Source()
+		if err != nil {
+			return nil, err
+		}
+		source["docvalue_fields"] = src
 	}
 	if len(s.scriptFields) > 0 {
 		sfmap := make(map[string]interface{})

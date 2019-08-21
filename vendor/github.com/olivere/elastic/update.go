@@ -14,7 +14,7 @@ import (
 )
 
 // UpdateService updates a document in Elasticsearch.
-// See https://www.elastic.co/guide/en/elasticsearch/reference/6.2/docs-update.html
+// See https://www.elastic.co/guide/en/elasticsearch/reference/6.8/docs-update.html
 // for details.
 type UpdateService struct {
 	client              *Client
@@ -37,6 +37,8 @@ type UpdateService struct {
 	detectNoop          *bool
 	doc                 interface{}
 	timeout             string
+	ifSeqNo             *int64
+	ifPrimaryTerm       *int64
 	pretty              bool
 }
 
@@ -113,7 +115,7 @@ func (b *UpdateService) VersionType(versionType string) *UpdateService {
 
 // Refresh the index after performing the update.
 //
-// See https://www.elastic.co/guide/en/elasticsearch/reference/6.2/docs-refresh.html
+// See https://www.elastic.co/guide/en/elasticsearch/reference/6.8/docs-refresh.html
 // for details.
 func (b *UpdateService) Refresh(refresh string) *UpdateService {
 	b.refresh = refresh
@@ -167,6 +169,20 @@ func (b *UpdateService) ScriptedUpsert(scriptedUpsert bool) *UpdateService {
 // Timeout is an explicit timeout for the operation, e.g. "1000", "1s" or "500ms".
 func (b *UpdateService) Timeout(timeout string) *UpdateService {
 	b.timeout = timeout
+	return b
+}
+
+// IfSeqNo indicates to only perform the update operation if the last
+// operation that has changed the document has the specified sequence number.
+func (b *UpdateService) IfSeqNo(seqNo int64) *UpdateService {
+	b.ifSeqNo = &seqNo
+	return b
+}
+
+// IfPrimaryTerm indicates to only perform the update operation if the
+// last operation that has changed the document has the specified primary term.
+func (b *UpdateService) IfPrimaryTerm(primaryTerm int64) *UpdateService {
+	b.ifPrimaryTerm = &primaryTerm
 	return b
 }
 
@@ -237,6 +253,12 @@ func (b *UpdateService) url() (string, url.Values, error) {
 	}
 	if b.retryOnConflict != nil {
 		params.Set("retry_on_conflict", fmt.Sprintf("%v", *b.retryOnConflict))
+	}
+	if v := b.ifSeqNo; v != nil {
+		params.Set("if_seq_no", fmt.Sprintf("%d", *v))
+	}
+	if v := b.ifPrimaryTerm; v != nil {
+		params.Set("if_primary_term", fmt.Sprintf("%d", *v))
 	}
 
 	return path, params, nil

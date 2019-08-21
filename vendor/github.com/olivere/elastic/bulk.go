@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"strings"
 
 	"github.com/olivere/elastic/uritemplates"
 )
@@ -23,7 +24,7 @@ import (
 // reuse BulkService to send many batches. You do not have to create a new
 // BulkService for each batch.
 //
-// See https://www.elastic.co/guide/en/elasticsearch/reference/6.2/docs-bulk.html
+// See https://www.elastic.co/guide/en/elasticsearch/reference/6.8/docs-bulk.html
 // for more details.
 type BulkService struct {
 	client  *Client
@@ -38,6 +39,7 @@ type BulkService struct {
 	routing             string
 	waitForActiveShards string
 	pretty              bool
+	filterPath          []string
 
 	// estimated bulk size in bytes, up to the request index sizeInBytesCursor
 	sizeInBytes       int64
@@ -94,7 +96,7 @@ func (s *BulkService) Timeout(timeout string) *BulkService {
 // changes to be made visible by a refresh before reying), or "false"
 // (no refresh related actions). The default value is "false".
 //
-// See https://www.elastic.co/guide/en/elasticsearch/reference/6.2/docs-refresh.html
+// See https://www.elastic.co/guide/en/elasticsearch/reference/6.8/docs-refresh.html
 // for details.
 func (s *BulkService) Refresh(refresh string) *BulkService {
 	s.refresh = refresh
@@ -126,6 +128,14 @@ func (s *BulkService) WaitForActiveShards(waitForActiveShards string) *BulkServi
 // Pretty tells Elasticsearch whether to return a formatted JSON response.
 func (s *BulkService) Pretty(pretty bool) *BulkService {
 	s.pretty = pretty
+	return s
+}
+
+// FilterPath allows reducing the response, a mechanism known as
+// response filtering and described here in
+// https://www.elastic.co/guide/en/elasticsearch/reference/current/common-options.html#common-options-response-filtering.
+func (s *BulkService) FilterPath(filterPath ...string) *BulkService {
+	s.filterPath = append(s.filterPath, filterPath...)
 	return s
 }
 
@@ -229,6 +239,9 @@ func (s *BulkService) Do(ctx context.Context) (*BulkResponse, error) {
 	params := make(url.Values)
 	if s.pretty {
 		params.Set("pretty", fmt.Sprintf("%v", s.pretty))
+	}
+	if len(s.filterPath) > 0 {
+		params.Set("filter_path", strings.Join(s.filterPath, ","))
 	}
 	if s.pipeline != "" {
 		params.Set("pipeline", s.pipeline)
