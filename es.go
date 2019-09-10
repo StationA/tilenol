@@ -20,7 +20,7 @@ const (
 	// ScrollSize is the max number of documents per scroll page
 	ScrollSize = 250
 	// ScrollTimeout is the time.Duration to keep the scroll context alive
-	ScrollTimeout = time.Minute
+	ScrollTimeout = 10 * time.Second
 )
 
 type ElasticsearchConfig struct {
@@ -49,7 +49,7 @@ func NewElasticsearchSource(config *ElasticsearchConfig) (Source, error) {
 		elastic.SetURL(fmt.Sprintf("http://%s:%d", config.Host, config.Port)),
 		elastic.SetGzip(true),
 		// TODO: Should this be configurable?
-		elastic.SetHealthcheckTimeoutStartup(30*time.Second),
+		elastic.SetHealthcheckTimeoutStartup(10*time.Second),
 	)
 	if err != nil {
 		return nil, err
@@ -88,7 +88,6 @@ func (e *ElasticsearchSource) boundsFilter(tileBounds orb.Bound) *Dict {
 }
 
 func (e *ElasticsearchSource) GetFeatures(ctx context.Context) (*geojson.FeatureCollection, error) {
-	Logger.Debugf("Running hit query")
 	return e.doGetFeatures(ctx)
 }
 
@@ -99,7 +98,7 @@ func (e *ElasticsearchSource) doGetFeatures(ctx context.Context) (*geojson.Featu
 	Logger.Debugf("Feature query: %V", s)
 
 	fc := geojson.NewFeatureCollection()
-	scroll := e.ES.Scroll(e.Index).Body(query).Size(ScrollSize)
+	scroll := e.ES.Scroll(e.Index).Query(query).Size(ScrollSize)
 	for {
 		scrollCtx, scrollCancel := context.WithTimeout(ctx, ScrollTimeout)
 		defer scrollCancel()
