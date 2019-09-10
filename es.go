@@ -134,7 +134,7 @@ func (e *ElasticsearchSource) doGetFeatures(ctx context.Context) (*geojson.Featu
 	query := elastic.NewBoolQuery().Filter(e.boundsFilter(tile))
 	ss := e.newSearchSource(query)
 	s, _ := ss.Source()
-	Logger.Debugf("Search source: %V", s)
+	Logger.Debugf("Search source: %#v", s)
 
 	fc := geojson.NewFeatureCollection()
 	scroll := e.ES.Scroll(e.Index).SearchSource(ss).Size(ScrollSize)
