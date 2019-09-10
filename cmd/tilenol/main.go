@@ -5,7 +5,7 @@ import (
 	"runtime"
 
 	"github.com/sirupsen/logrus"
-	"github.com/stationa/tilenol/server"
+	"github.com/stationa/tilenol"
 	"gopkg.in/alecthomas/kingpin.v2"
 )
 
@@ -16,22 +16,12 @@ var (
 		Flag("debug", "Enable debug mode").
 		Short('d').
 		Bool()
-	esHost = runCmd.
-		Flag("es-host", "ElasticSearch host-port").
-		Envar("TILENOL_ES_HOST").
-		Short('e').
-		Default("localhost:9200").
-		String()
-	esMap = runCmd.
-		Flag("es-mappings", "ElasticSearch index name to geo-field mappings").
-		Short('m').
-		Default("_all=geometry").
-		StringMap()
-	zoomRanges = runCmd.
-			Flag("zoom-ranges", "ElasticSearch index name to zoom range mappings").
-			Short('Z').
-			Default("_all=0-18").
-			StringMap()
+	configFile = runCmd.
+			Flag("config-file", "Server configuration file").
+			Envar("TILENOL_CONFIG_FILE").
+			Short('f').
+			Default("tilenol.yml").
+			File()
 	port = runCmd.
 		Flag("port", "Port to serve tiles on").
 		Envar("TILENOL_PORT").
@@ -54,22 +44,6 @@ var (
 			Envar("TILENOL_SIMPLIFY_SHAPES").
 			Short('s').
 			Bool()
-	cacheControl = runCmd.
-			Flag("cache-control", "Sets the \"Cache-Control\" header").
-			Envar("TILENOL_CACHE_CONTROL").
-			Short('c').
-			Default("no-cache").
-			String()
-	cache = runCmd.
-		Flag("cache-server-address", "Enables caching using Redis").
-		Envar("TILENOL_CACHE_SERVER_ADDRESS").
-		Short('C').
-		String()
-	cacheTTL = runCmd.
-			Flag("cache-ttl", "Sets the time-to-live for Redis").
-			Envar("TILENOL_CACHE_TTL").
-			Short('t').
-			String()
 	numProcs = runCmd.
 			Flag("num-processes", "Sets the number of processes to be used").
 			Envar("TILENOL_NUM_PROCESSES").
@@ -103,26 +77,21 @@ func main() {
 	switch cmd {
 	case runCmd.FullCommand():
 		if *debug {
-			server.Logger.SetLevel(logrus.DebugLevel)
+			tilenol.Logger.SetLevel(logrus.DebugLevel)
 		}
 
-		var opts []server.ConfigOption
-		opts = append(opts, server.Port(*port))
-		opts = append(opts, server.InternalPort(*internalPort))
-		opts = append(opts, server.CacheControl(*cacheControl))
-		opts = append(opts, server.CacheServer(*cache))
-		opts = append(opts, server.CacheTTL(*cacheTTL))
-		opts = append(opts, server.ESHost(*esHost))
-		opts = append(opts, server.ESMappings(*esMap))
-		opts = append(opts, server.ZoomRanges(*zoomRanges))
+		var opts []tilenol.ConfigOption
+		opts = append(opts, tilenol.Port(*port))
+		opts = append(opts, tilenol.InternalPort(*internalPort))
+		opts = append(opts, tilenol.ConfigFile(*configFile))
 		if *cors {
-			opts = append(opts, server.EnableCORS)
+			opts = append(opts, tilenol.EnableCORS)
 		}
 		if *simplify {
-			opts = append(opts, server.SimplifyShapes)
+			opts = append(opts, tilenol.SimplifyShapes)
 		}
 
-		s, err := server.NewServer(opts...)
+		s, err := tilenol.NewServer(opts...)
 		if err != nil {
 			panic(err)
 		}

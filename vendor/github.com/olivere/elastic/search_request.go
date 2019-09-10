@@ -254,11 +254,27 @@ func (r *SearchRequest) DocValueField(field string) *SearchRequest {
 	return r
 }
 
+// DocValueFieldWithFormat adds a docvalue based field to load and return.
+// The field does not have to be stored, but it's recommended to use
+// non analyzed or numeric fields.
+func (r *SearchRequest) DocValueFieldWithFormat(field DocvalueField) *SearchRequest {
+	r.searchSource = r.searchSource.DocvalueFieldWithFormat(field)
+	return r
+}
+
 // DocValueFields adds one or more docvalue based field to load and return.
 // The fields do not have to be stored, but it's recommended to use
 // non analyzed or numeric fields.
 func (r *SearchRequest) DocValueFields(fields ...string) *SearchRequest {
 	r.searchSource = r.searchSource.DocvalueFields(fields...)
+	return r
+}
+
+// DocValueFieldsWithFormat adds one or more docvalue based field to load and return.
+// The fields do not have to be stored, but it's recommended to use
+// non analyzed or numeric fields.
+func (r *SearchRequest) DocValueFieldsWithFormat(fields ...DocvalueField) *SearchRequest {
+	r.searchSource = r.searchSource.DocvalueFieldsWithFormat(fields...)
 	return r
 }
 
@@ -327,7 +343,7 @@ func (r *SearchRequest) SearchAfter(sortValues ...interface{}) *SearchRequest {
 // Slice allows partitioning the documents in multiple slices.
 // It is e.g. used to slice a scroll operation, supported in
 // Elasticsearch 5.0 or later.
-// See https://www.elastic.co/guide/en/elasticsearch/reference/6.2/search-request-scroll.html#sliced-scroll
+// See https://www.elastic.co/guide/en/elasticsearch/reference/6.8/search-request-scroll.html#sliced-scroll
 // for details.
 func (r *SearchRequest) Slice(sliceQuery Query) *SearchRequest {
 	r.searchSource = r.searchSource.Slice(sliceQuery)
@@ -344,7 +360,7 @@ func (r *SearchRequest) TrackScores(trackScores bool) *SearchRequest {
 // TrackTotalHits indicates if the total hit count for the query should be tracked.
 // Defaults to true.
 //
-// See https://www.elastic.co/guide/en/elasticsearch/reference/6.3/index-modules-index-sorting.html#early-terminate
+// See https://www.elastic.co/guide/en/elasticsearch/reference/6.8/index-modules-index-sorting.html#early-terminate
 // for details.
 func (r *SearchRequest) TrackTotalHits(trackTotalHits bool) *SearchRequest {
 	r.searchSource = r.searchSource.TrackTotalHits(trackTotalHits)
@@ -436,7 +452,7 @@ func (r *SearchRequest) PreFilterShardSize(size int) *SearchRequest {
 
 // header is used e.g. by MultiSearch to get information about the search header
 // of one SearchRequest.
-// See https://www.elastic.co/guide/en/elasticsearch/reference/6.4/search-multi-search.html
+// See https://www.elastic.co/guide/en/elasticsearch/reference/6.8/search-multi-search.html
 func (r *SearchRequest) header() interface{} {
 	h := make(map[string]interface{})
 	if r.searchType != "" {
@@ -492,7 +508,7 @@ func (r *SearchRequest) header() interface{} {
 //
 // Body is used e.g. by MultiSearch to get information about the search body
 // of one SearchRequest.
-// See https://www.elastic.co/guide/en/elasticsearch/reference/6.4/search-multi-search.html
+// See https://www.elastic.co/guide/en/elasticsearch/reference/6.8/search-multi-search.html
 func (r *SearchRequest) Body() (string, error) {
 	if r.source == nil {
 		// Default: No custom source specified

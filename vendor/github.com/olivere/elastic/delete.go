@@ -16,7 +16,7 @@ import (
 // DeleteService allows to delete a typed JSON document from a specified
 // index based on its id.
 //
-// See https://www.elastic.co/guide/en/elasticsearch/reference/6.2/docs-delete.html
+// See https://www.elastic.co/guide/en/elasticsearch/reference/6.8/docs-delete.html
 // for details.
 type DeleteService struct {
 	client              *Client
@@ -31,6 +31,8 @@ type DeleteService struct {
 	waitForActiveShards string
 	parent              string
 	refresh             string
+	ifSeqNo             *int64
+	ifPrimaryTerm       *int64
 }
 
 // NewDeleteService creates a new DeleteService.
@@ -100,10 +102,24 @@ func (s *DeleteService) Parent(parent string) *DeleteService {
 
 // Refresh the index after performing the operation.
 //
-// See https://www.elastic.co/guide/en/elasticsearch/reference/6.2/docs-refresh.html
+// See https://www.elastic.co/guide/en/elasticsearch/reference/6.8/docs-refresh.html
 // for details.
 func (s *DeleteService) Refresh(refresh string) *DeleteService {
 	s.refresh = refresh
+	return s
+}
+
+// IfSeqNo indicates to only perform the delete operation if the last
+// operation that has changed the document has the specified sequence number.
+func (s *DeleteService) IfSeqNo(seqNo int64) *DeleteService {
+	s.ifSeqNo = &seqNo
+	return s
+}
+
+// IfPrimaryTerm indicates to only perform the delete operation if the
+// last operation that has changed the document has the specified primary term.
+func (s *DeleteService) IfPrimaryTerm(primaryTerm int64) *DeleteService {
+	s.ifPrimaryTerm = &primaryTerm
 	return s
 }
 
@@ -150,6 +166,12 @@ func (s *DeleteService) buildURL() (string, url.Values, error) {
 	}
 	if s.parent != "" {
 		params.Set("parent", s.parent)
+	}
+	if v := s.ifSeqNo; v != nil {
+		params.Set("if_seq_no", fmt.Sprintf("%d", *v))
+	}
+	if v := s.ifPrimaryTerm; v != nil {
+		params.Set("if_primary_term", fmt.Sprintf("%d", *v))
 	}
 	return path, params, nil
 }

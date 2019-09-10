@@ -11,8 +11,9 @@ services:
     image: stationa/tilenol:latest
     command: run
     environment:
-      TILENOL_ES_HOST: es:9200
       TILENOL_ENABLE_CORS: "true"
+    volumes:
+      - ./tilenol.yml:/tilenol.yml
     ports:
       - 3000:3000
       - 3001:3001

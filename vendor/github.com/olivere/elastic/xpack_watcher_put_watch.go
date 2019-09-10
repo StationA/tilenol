@@ -15,13 +15,15 @@ import (
 
 // XPackWatcherPutWatchService either registers a new watch in Watcher
 // or update an existing one.
-// See https://www.elastic.co/guide/en/elasticsearch/reference/6.4/watcher-api-put-watch.html.
+// See https://www.elastic.co/guide/en/elasticsearch/reference/6.8/watcher-api-put-watch.html.
 type XPackWatcherPutWatchService struct {
 	client        *Client
 	pretty        bool
 	id            string
 	active        *bool
 	masterTimeout string
+	ifSeqNo       *int64
+	ifPrimaryTerm *int64
 	body          interface{}
 }
 
@@ -56,6 +58,20 @@ func (s *XPackWatcherPutWatchService) Pretty(pretty bool) *XPackWatcherPutWatchS
 	return s
 }
 
+// IfSeqNo indicates to update the watch only if the last operation that
+// has changed the watch has the specified sequence number.
+func (s *XPackWatcherPutWatchService) IfSeqNo(seqNo int64) *XPackWatcherPutWatchService {
+	s.ifSeqNo = &seqNo
+	return s
+}
+
+// IfPrimaryTerm indicates to update the watch only if the last operation that
+// has changed the watch has the specified primary term.
+func (s *XPackWatcherPutWatchService) IfPrimaryTerm(primaryTerm int64) *XPackWatcherPutWatchService {
+	s.ifPrimaryTerm = &primaryTerm
+	return s
+}
+
 // Body specifies the watch. Use a string or a type that will get serialized as JSON.
 func (s *XPackWatcherPutWatchService) Body(body interface{}) *XPackWatcherPutWatchService {
 	s.body = body
@@ -82,6 +98,12 @@ func (s *XPackWatcherPutWatchService) buildURL() (string, url.Values, error) {
 	}
 	if s.masterTimeout != "" {
 		params.Set("master_timeout", s.masterTimeout)
+	}
+	if v := s.ifSeqNo; v != nil {
+		params.Set("if_seq_no", fmt.Sprintf("%d", *v))
+	}
+	if v := s.ifPrimaryTerm; v != nil {
+		params.Set("if_primary_term", fmt.Sprintf("%d", *v))
 	}
 	return path, params, nil
 }
