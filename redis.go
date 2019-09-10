@@ -7,17 +7,25 @@ import (
 	"github.com/go-redis/redis"
 )
 
+// RedisConfig is the YAML configuration for a RedisCache
 type RedisConfig struct {
-	Host string        `yaml:"host"`
-	Port int           `yaml:"port"`
-	TTL  time.Duration `yaml:"ttl"`
+	// Host is the Redis cluster host name
+	Host string `yaml:"host"`
+	// Port is the Redis cluster port number
+	Port int `yaml:"port"`
+	// TTL is how long each cache entry should remain before refresh
+	TTL time.Duration `yaml:"ttl"`
 }
 
+// RedisCache is a Redis-backed Cache implementation
 type RedisCache struct {
+	// Client is the backend Redis cluster client
 	Client *redis.Client
-	TTL    time.Duration
+	// TTL is how long each cache entry should remain before refresh
+	TTL time.Duration
 }
 
+// NewRedisCache creates a new RedisCache given a RedisConfig
 func NewRedisCache(config *RedisConfig) (Cache, error) {
 	client := redis.NewClient(&redis.Options{
 		Addr: fmt.Sprintf("%s:%d", config.Host, config.Port),
@@ -29,6 +37,8 @@ func NewRedisCache(config *RedisConfig) (Cache, error) {
 	}, nil
 }
 
+// Exists tries to get the cached value for a key, returning whether or not the key
+// exists
 func (r *RedisCache) Exists(key string) bool {
 	_, err := r.Client.Get(key).Bytes()
 	if err == redis.Nil {
@@ -41,6 +51,7 @@ func (r *RedisCache) Exists(key string) bool {
 	return true
 }
 
+// Get retrieves the cached value for a given key
 func (r *RedisCache) Get(key string) ([]byte, error) {
 	val, err := r.Client.Get(key).Bytes()
 	if err != nil {
@@ -49,6 +60,7 @@ func (r *RedisCache) Get(key string) ([]byte, error) {
 	return val, nil
 }
 
+// Put attempts to store a new value into Redis at a given key
 func (r *RedisCache) Put(key string, val []byte) error {
 	err := r.Client.Set(key, val, r.TTL).Err()
 	if err != nil {

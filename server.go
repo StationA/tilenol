@@ -34,14 +34,22 @@ const (
 
 // Server is a tilenol server instance
 type Server struct {
-	Port         uint16
+	// Port is the port number to bind the tile server
+	Port uint16
+	// InternalPort is the port number to bind the internal metrics endpoints
 	InternalPort uint16
-	EnableCORS   bool
-	Simplify     bool
-	Layers       []Layer
-	Cache        Cache
+	// EnableCORS configures whether or not the tile server responds with CORS headers
+	EnableCORS bool
+	// Simplify configures whether or not the tile server simplifies outgoing feature
+	// geometries based on zoom level
+	Simplify bool
+	// Layers is the list of configured layers supported by the tile server
+	Layers []Layer
+	// Cache is an optional cache object that the server uses to cache responses
+	Cache Cache
 }
 
+// Handler is a type alias for a more functional HTTP request handler
 type Handler func(context.Context, io.Writer, *http.Request) error
 
 // NewServer creates a new server instance pre-configured with the given ConfigOption's
@@ -63,7 +71,8 @@ func (s *Server) Start() {
 	//-- MIDDLEWARE
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
-	r.Use(middleware.Logger)
+	logFormatter := &middleware.DefaultLogFormatter{Logger: Logger, NoColor: true}
+	r.Use(middleware.RequestLogger(logFormatter))
 	r.Use(middleware.Recoverer)
 
 	if s.EnableCORS {
@@ -98,11 +107,14 @@ func (s *Server) Start() {
 	select {}
 }
 
+// healthCheck implements a simple healthcheck endpoint for the internal metrics server
 func (s *Server) healthCheck(w http.ResponseWriter, r *http.Request) {
 	// TODO: Maybe in the future check that ES is reachable?
 	fmt.Fprintf(w, "OK")
 }
 
+// calculateSimplificationThreshold determines the simplification threshold based on the
+// current zoom level
 func calculateSimplificationThreshold(minZoom, maxZoom, currentZoom int) float64 {
 	s := MinSimplify - MaxSimplify
 	z := float64(maxZoom - minZoom)
@@ -110,6 +122,8 @@ func calculateSimplificationThreshold(minZoom, maxZoom, currentZoom int) float64
 	return p*float64(currentZoom-minZoom) + MaxSimplify
 }
 
+// cached is a wrapper function that optionally tries to cache outgoing responses from
+// a Handler
 func (s *Server) cached(handler Handler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
@@ -159,6 +173,8 @@ func (s *Server) cached(handler Handler) http.HandlerFunc {
 	}
 }
 
+// filterLayersByNames filters the tile server layers by the names of layers being
+// requested
 func filterLayersByNames(inLayers []Layer, names []string) []Layer {
 	var outLayers []Layer
 	for _, name := range names {
@@ -171,6 +187,7 @@ func filterLayersByNames(inLayers []Layer, names []string) []Layer {
 	return outLayers
 }
 
+// filterLayersByZoom filters the tile server layers by zoom level bounds
 func filterLayersByZoom(inLayers []Layer, z int) []Layer {
 	var outLayers []Layer
 	for _, layer := range inLayers {
@@ -181,6 +198,7 @@ func filterLayersByZoom(inLayers []Layer, z int) []Layer {
 	return outLayers
 }
 
+// getVectorTile computes a vector tile response for the incoming request
 func (s *Server) getVectorTile(rctx context.Context, w io.Writer, r *http.Request) error {
 	z, _ := strconv.Atoi(chi.URLParam(r, "z"))
 	x, _ := strconv.Atoi(chi.URLParam(r, "x"))
@@ -235,8 +253,8 @@ func (s *Server) getVectorTile(rctx context.Context, w io.Writer, r *http.Reques
 	return err
 }
 
+// handleError is a helper function to generate a generic tile server error response
 func (s *Server) handleError(err error, w http.ResponseWriter, r *http.Request) {
 	Logger.Errorf("Tile request failed: %s", err.Error())
-
 	http.Error(w, err.Error(), http.StatusInternalServerError)
 }

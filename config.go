@@ -6,11 +6,15 @@ import (
 	"gopkg.in/go-yaml/yaml.v2"
 )
 
+// Config is a YAML server configuration object
 type Config struct {
-	Cache  *CacheConfig  `yaml:"cache"`
+	// Cache configures the tile server cache
+	Cache *CacheConfig `yaml:"cache"`
+	// Layers configures the tile server layers
 	Layers []LayerConfig `yaml:"layers"`
 }
 
+// LoadConfig loads the configuration from disk, and decodes it into a Config object
 func LoadConfig(configFile *os.File) (*Config, error) {
 	dec := yaml.NewDecoder(configFile)
 	dec.SetStrict(true)

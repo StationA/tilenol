@@ -9,41 +9,60 @@ import (
 	"time"
 
 	"github.com/olivere/elastic"
-	"github.com/paulmach/orb"
 	"github.com/paulmach/orb/geojson"
 	"github.com/paulmach/orb/maptile"
 )
 
 const (
 	// TODO: Externalize these?
-
 	// ScrollSize is the max number of documents per scroll page
 	ScrollSize = 250
 	// ScrollTimeout is the time.Duration to keep the scroll context alive
 	ScrollTimeout = 10 * time.Second
 )
 
+// ElasticsearchConfig is the YAML configuration structure for configuring a new
+// ElasticsearchSource
 type ElasticsearchConfig struct {
-	Host          string            `yaml:"host"`
-	Port          int               `yaml:"port"`
-	Index         string            `yaml:"index"`
-	GeometryField string            `yaml:"geometryField"`
-	SourceFields  map[string]string `yaml:"sourceFields"`
+	// Host is the hostname part of the backend Elasticsearch cluster
+	Host string `yaml:"host"`
+	// Host is the port number of the backend Elasticsearch cluster
+	Port int `yaml:"port"`
+	// Index is the name of the Elasticsearch index used for retrieving feature data
+	Index string `yaml:"index"`
+	// GeometryField is the name of the document field that holds the feature geometry
+	GeometryField string `yaml:"geometryField"`
+	// SourceFields is a mapping from the feature property name to the source document
+	// field name
+	SourceFields map[string]string `yaml:"sourceFields"`
 }
 
+// ElasticsearchSource is a Source implementation that retrieves feature data from an
+// Elasticsearch cluster
 type ElasticsearchSource struct {
-	ES            *elastic.Client
-	Index         string
+	// ES is the internal Elasticsearch cluster client
+	ES *elastic.Client
+	// Index is the name of the Elasticsearch index used for retrieving feature data
+	Index string
+	// GeometryField is the name of the document field that holds the feature geometry
 	GeometryField string
-	SourceFields  map[string]string
+	// SourceFields is a mapping from the feature property name to the source document
+	// field name
+	SourceFields map[string]string
 }
 
+// Dict is a type alias for map[string]interface{} that cleans up literals and also adds
+// a helper method to implement the elastic.Query interface
 type Dict map[string]interface{}
 
+// Source implements the elastic.Query interface, by simply returning the raw Dict
+// contents
 func (d *Dict) Source() (interface{}, error) {
 	return d, nil
 }
 
+// NewElasticsearchSource creates a new Source that retrieves feature data from an
+// Elasticsearch cluster
 func NewElasticsearchSource(config *ElasticsearchConfig) (Source, error) {
 	es, err := elastic.NewClient(
 		elastic.SetURL(fmt.Sprintf("http://%s:%d", config.Host, config.Port)),
@@ -62,15 +81,16 @@ func NewElasticsearchSource(config *ElasticsearchConfig) (Source, error) {
 	}, nil
 }
 
-func (e *ElasticsearchSource) getSourceFields() []string {
-	fields := []string{e.GeometryField}
-	for _, v := range e.SourceFields {
-		fields = append(fields, v)
-	}
-	return fields
+// GetFeatures implements the Source interface, to get feature data from an
+// Elasticsearch cluster
+func (e *ElasticsearchSource) GetFeatures(ctx context.Context) (*geojson.FeatureCollection, error) {
+	// TODO: Add optional support for other query constructs? (e.g. aggregations)
+	return e.doGetFeatures(ctx)
 }
 
-func (e *ElasticsearchSource) boundsFilter(tileBounds orb.Bound) *Dict {
+// boundsFilter converts an XYZ map tile into an Elasticsearch-friendly geo_shape query
+func (e *ElasticsearchSource) boundsFilter(tile maptile.Tile) *Dict {
+	tileBounds := tile.Bound()
 	return &Dict{
 		"geo_shape": Dict{
 			e.GeometryField: Dict{
@@ -87,18 +107,37 @@ func (e *ElasticsearchSource) boundsFilter(tileBounds orb.Bound) *Dict {
 	}
 }
 
-func (e *ElasticsearchSource) GetFeatures(ctx context.Context) (*geojson.FeatureCollection, error) {
-	return e.doGetFeatures(ctx)
+// getSourceFields returns the list of source fields to include in the fetched features
+func (e *ElasticsearchSource) getSourceFields() []string {
+	fields := []string{e.GeometryField}
+	for _, v := range e.SourceFields {
+		fields = append(fields, v)
+	}
+	return fields
 }
 
+// newSearchSource constructs a full Elasticsearch request body from a given query and
+// adds document source inclusions/exclusions
+func (e *ElasticsearchSource) newSearchSource(query elastic.Query) *elastic.SearchSource {
+	includes := e.getSourceFields()
+	// TODO: Do we need to do anything fancier here?
+	excludes := []string{}
+	return elastic.NewSearchSource().
+		FetchSourceIncludeExclude(includes, excludes).
+		Query(query)
+}
+
+// doGetFeatures scrolls the configured Elasticsearch index for all documents that fall
+// within the tile boundaries
 func (e *ElasticsearchSource) doGetFeatures(ctx context.Context) (*geojson.FeatureCollection, error) {
 	tile := ctx.Value("tile").(maptile.Tile)
-	query := elastic.NewBoolQuery().Filter(e.boundsFilter(tile.Bound()))
-	s, _ := query.Source()
-	Logger.Debugf("Feature query: %V", s)
+	query := elastic.NewBoolQuery().Filter(e.boundsFilter(tile))
+	ss := e.newSearchSource(query)
+	s, _ := ss.Source()
+	Logger.Debugf("Search source: %V", s)
 
 	fc := geojson.NewFeatureCollection()
-	scroll := e.ES.Scroll(e.Index).Query(query).Size(ScrollSize)
+	scroll := e.ES.Scroll(e.Index).SearchSource(ss).Size(ScrollSize)
 	for {
 		scrollCtx, scrollCancel := context.WithTimeout(ctx, ScrollTimeout)
 		defer scrollCancel()
@@ -109,9 +148,9 @@ func (e *ElasticsearchSource) doGetFeatures(ctx context.Context) (*geojson.Featu
 		if err != nil {
 			return nil, err
 		}
-		Logger.Debugf("Scrolling %d hits", len(results.Hits.Hits))
+		Logger.Tracef("Scrolling %d hits", len(results.Hits.Hits))
 		for _, hit := range results.Hits.Hits {
-			feat, err := e.hitToFeature(hit)
+			feat, err := e.HitToFeature(hit)
 			if err != nil {
 				return nil, err
 			}
@@ -122,7 +161,10 @@ func (e *ElasticsearchSource) doGetFeatures(ctx context.Context) (*geojson.Featu
 	return fc, nil
 }
 
-func (e *ElasticsearchSource) hitToFeature(hit *elastic.SearchHit) (*geojson.Feature, error) {
+// HitToFeature converts an Elasticsearch hit object into a GeoJSON feature, by
+// using the hit's geometry as the feature geometry, and mapping all other requested
+// source fields to feature properties
+func (e *ElasticsearchSource) HitToFeature(hit *elastic.SearchHit) (*geojson.Feature, error) {
 	id := hit.Id
 	var source map[string]interface{}
 	err := json.Unmarshal(*hit.Source, &source)
@@ -155,25 +197,6 @@ func (e *ElasticsearchSource) hitToFeature(hit *elastic.SearchHit) (*geojson.Fea
 	}
 	feat.Properties["id"] = id
 	return feat, nil
-}
-
-func flatten(something interface{}, accum map[string]interface{}, prefixParts ...string) {
-	if something == nil {
-		return
-	}
-	switch something.(type) {
-	case []interface{}:
-		for i, thing := range something.([]interface{}) {
-			flatten(thing, accum, append(prefixParts, fmt.Sprintf("%d", i))...)
-		}
-	case map[string]interface{}:
-		for key, value := range something.(map[string]interface{}) {
-			flatten(value, accum, append(prefixParts, key)...)
-		}
-	default:
-		newKey := strings.Join(prefixParts, ".")
-		accum[newKey] = something
-	}
 }
 
 // GetNested is a utility function to traverse a path of keys in a nested JSON object

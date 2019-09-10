@@ -184,7 +184,6 @@
     "github.com/go-chi/cors",
     "github.com/go-redis/redis",
     "github.com/olivere/elastic",
-    "github.com/paulmach/orb",
     "github.com/paulmach/orb/encoding/mvt",
     "github.com/paulmach/orb/geojson",
     "github.com/paulmach/orb/maptile",

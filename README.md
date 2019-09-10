@@ -42,23 +42,37 @@ Runs the Tilenol server
 
 Flags:
       --help                 Show context-sensitive help (also try --help-long and --help-man).
-  -d, --debug                Enable debug mode
-  -e, --es-host="localhost:9200"
-                             ElasticSearch host-port
-  -m, --es-mappings=_all=geometry ...
-                             ElasticSearch index name to geo-field mappings
-  -Z, --zoom-ranges=_all=0-18 ...
-                             ElasticSearch index name to zoom range mappings
-  -p, --port=3000            Port to serve tiles on
-  -i, --internal-port=3001   Port for internal metrics and healthchecks
-  -x, --enable-cors          Enables cross-origin resource sharing (CORS)
-  -s, --simplify-shapes      Simplifies geometries based on zoom level
-  -c, --cache-control="no-cache"
-                             Sets the "Cache-Control" header
-  -C, --cache-server-address=CACHE-SERVER-ADDRESS
-                             Enables caching using Redis
-  -t, --cache-ttl=CACHE-TTL  Sets the time-to-live for Redis
-  -n, --num-processes=0      Sets the number of processes to be used
+  -d, --debug                    Enable debug mode
+  -f, --config-file=tilenol.yml  Server configuration file
+  -p, --port=3000                Port to serve tiles on
+  -i, --internal-port=3001       Port for internal metrics and healthchecks
+  -x, --enable-cors              Enables cross-origin resource sharing (CORS)
+  -s, --simplify-shapes          Simplifies geometries based on zoom level
+  -n, --num-processes=0          Sets the number of processes to be used
+```
+
+### Configuration
+
+```yaml
+# Cache configuration (optional)
+cache:
+  redis:
+    host: localhost
+    port: 6379
+    ttl: 24h
+# Layer configuration
+layers:
+  - name: buildings
+    minzoom: 14
+    source:
+      elasticsearch:
+        host: localhost
+        port: 9200
+        index: buildings
+        geometryField: geometry
+        sourceFields:
+          area_sqft: building.area_sqft
+          height_ft: building.height_ft
 ```
 
 ## Contributing
