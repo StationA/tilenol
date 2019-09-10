@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mmcloughlin/geohash"
 	"github.com/olivere/elastic"
 	"github.com/paulmach/orb"
 	"github.com/paulmach/orb/geojson"
@@ -29,6 +30,7 @@ type ElasticsearchConfig struct {
 	Index         string            `yaml:"index"`
 	GeometryField string            `yaml:"geometryField"`
 	SourceFields  map[string]string `yaml:"sourceFields"`
+	Aggs          map[string]string `yaml:"aggs"`
 }
 
 type ElasticsearchSource struct {
@@ -36,6 +38,7 @@ type ElasticsearchSource struct {
 	Index         string
 	GeometryField string
 	SourceFields  map[string]string
+	Aggs          map[string]string
 }
 
 type Dict map[string]interface{}
@@ -59,6 +62,7 @@ func NewElasticsearchSource(config *ElasticsearchConfig) (Source, error) {
 		Index:         config.Index,
 		GeometryField: config.GeometryField,
 		SourceFields:  config.SourceFields,
+		Aggs:          config.Aggs,
 	}, nil
 }
 
@@ -88,8 +92,55 @@ func (e *ElasticsearchSource) boundsFilter(tileBounds orb.Bound) *Dict {
 }
 
 func (e *ElasticsearchSource) GetFeatures(ctx context.Context) (*geojson.FeatureCollection, error) {
-	Logger.Debugf("Running hit query")
-	return e.doGetFeatures(ctx)
+	if e.Aggs != nil {
+		Logger.Debugf("Running aggregate query")
+		return e.doGetAggregates(ctx)
+	} else {
+		Logger.Debugf("Running hit query")
+		return e.doGetFeatures(ctx)
+	}
+}
+
+func (e *ElasticsearchSource) doGetAggregates(ctx context.Context) (*geojson.FeatureCollection, error) {
+	tile := ctx.Value("tile").(maptile.Tile)
+	query := elastic.NewBoolQuery().Filter(e.boundsFilter(tile.Bound()))
+
+	fc := geojson.NewFeatureCollection()
+	var cellAggQ = elastic.NewGeoHashGridAggregation().
+		Field(e.GeometryField)
+
+	for aggName, aggField := range e.Aggs {
+		statsAggQ := elastic.NewExtendedStatsAggregation().
+			Field(aggField)
+		cellAggQ = cellAggQ.SubAggregation(aggName, statsAggQ)
+	}
+	results, err := e.ES.Search(e.Index).
+		Query(query).
+		Aggregation("cells", cellAggQ).
+		Do(ctx)
+	if err != nil {
+		return nil, err
+	}
+	cellAgg, found := results.Aggregations.GeoHash("cells")
+	if found {
+		for _, bucket := range cellAgg.Buckets {
+			cellBB := geohash.BoundingBox(bucket.Key.(string))
+			lat, lng := cellBB.Center()
+			geom := orb.Point{lng, lat}
+			feat := geojson.NewFeature(geom)
+			feat.ID = bucket.Key.(string)
+			for aggName, _ := range e.Aggs {
+				statsAgg, statsFound := bucket.Aggregations.ExtendedStats(aggName)
+				if statsFound {
+					feat.Properties[fmt.Sprintf("%s:avg", aggName)] = *statsAgg.Avg
+					feat.Properties[fmt.Sprintf("%s:sum", aggName)] = *statsAgg.Sum
+					feat.Properties[fmt.Sprintf("%s:count", aggName)] = statsAgg.Count
+				}
+			}
+			fc.Append(feat)
+		}
+	}
+	return fc, nil
 }
 
 func (e *ElasticsearchSource) doGetFeatures(ctx context.Context) (*geojson.FeatureCollection, error) {

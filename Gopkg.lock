@@ -85,6 +85,14 @@
   revision = "b2ccc519800e761ac8000b95e5d57c80a897ff9e"
 
 [[projects]]
+  digest = "1:479ca43a5d310f88d54fef078013cb2902ff1c20ef59ba16e9e044d0d6a326c5"
+  name = "github.com/mmcloughlin/geohash"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "a84196f7a15d0ea8c5919f1ec0f15172fb518fba"
+  version = "v0.9.0"
+
+[[projects]]
   digest = "1:c2d643e8b2c25cf18d6e1237233df6457729d9491bbad6fa9598cad8d01466a6"
   name = "github.com/olivere/elastic"
   packages = [
@@ -183,6 +191,7 @@
     "github.com/go-chi/chi/middleware",
     "github.com/go-chi/cors",
     "github.com/go-redis/redis",
+    "github.com/mmcloughlin/geohash",
     "github.com/olivere/elastic",
     "github.com/paulmach/orb",
     "github.com/paulmach/orb/encoding/mvt",
