@@ -38,6 +38,12 @@ type ElasticsearchSource struct {
 	SourceFields  map[string]string
 }
 
+type Dict map[string]interface{}
+
+func (d *Dict) Source() (interface{}, error) {
+	return d, nil
+}
+
 func NewElasticsearchSource(config *ElasticsearchConfig) (Source, error) {
 	es, err := elastic.NewClient(
 		elastic.SetURL(fmt.Sprintf("http://%s:%d", config.Host, config.Port)),
@@ -64,31 +70,57 @@ func (e *ElasticsearchSource) getSourceFields() []string {
 	return fields
 }
 
-func (e *ElasticsearchSource) buildQuery(tileBounds orb.Bound) interface{} {
-	return map[string]interface{}{
-		"query": map[string]interface{}{
-			"bool": map[string]interface{}{
-				"must": map[string]interface{}{
-					"match_all": map[string]interface{}{},
-				},
-				"filter": map[string]interface{}{
-					"geo_shape": map[string]interface{}{
-						e.GeometryField: map[string]interface{}{
-							"shape": map[string]interface{}{
-								"type": "envelope",
-								"coordinates": [][]float64{
-									{tileBounds.Left(), tileBounds.Top()},
-									{tileBounds.Right(), tileBounds.Bottom()},
-								},
-							},
-							"relation": "intersects",
-						},
+func (e *ElasticsearchSource) boundsFilter(tileBounds orb.Bound) *Dict {
+	return &Dict{
+		"geo_shape": Dict{
+			e.GeometryField: Dict{
+				"shape": Dict{
+					"type": "envelope",
+					"coordinates": [][]float64{
+						{tileBounds.Left(), tileBounds.Top()},
+						{tileBounds.Right(), tileBounds.Bottom()},
 					},
 				},
+				"relation": "intersects",
 			},
 		},
-		"_source": e.getSourceFields(),
 	}
+}
+
+func (e *ElasticsearchSource) GetFeatures(ctx context.Context) (*geojson.FeatureCollection, error) {
+	Logger.Debugf("Running hit query")
+	return e.doGetFeatures(ctx)
+}
+
+func (e *ElasticsearchSource) doGetFeatures(ctx context.Context) (*geojson.FeatureCollection, error) {
+	tile := ctx.Value("tile").(maptile.Tile)
+	query := elastic.NewBoolQuery().Filter(e.boundsFilter(tile.Bound()))
+	s, _ := query.Source()
+	Logger.Debugf("Feature query: %V", s)
+
+	fc := geojson.NewFeatureCollection()
+	scroll := e.ES.Scroll(e.Index).Body(query).Size(ScrollSize)
+	for {
+		scrollCtx, scrollCancel := context.WithTimeout(ctx, ScrollTimeout)
+		defer scrollCancel()
+		results, err := scroll.Do(scrollCtx)
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+		Logger.Debugf("Scrolling %d hits", len(results.Hits.Hits))
+		for _, hit := range results.Hits.Hits {
+			feat, err := e.hitToFeature(hit)
+			if err != nil {
+				return nil, err
+			}
+			fc.Append(feat)
+		}
+		scrollCancel()
+	}
+	return fc, nil
 }
 
 func (e *ElasticsearchSource) hitToFeature(hit *elastic.SearchHit) (*geojson.Feature, error) {
@@ -117,7 +149,6 @@ func (e *ElasticsearchSource) hitToFeature(hit *elastic.SearchHit) (*geojson.Fea
 	feat.Properties = make(map[string]interface{})
 	// Populate the feature with the mapped source fields
 	for prop, fieldName := range e.SourceFields {
-		Logger.Debugf("Mapping %s -> %s", prop, fieldName)
 		val, found := GetNested(source, strings.Split(fieldName, "."))
 		if found {
 			feat.Properties[prop] = val
@@ -125,40 +156,6 @@ func (e *ElasticsearchSource) hitToFeature(hit *elastic.SearchHit) (*geojson.Fea
 	}
 	feat.Properties["id"] = id
 	return feat, nil
-}
-
-func (e *ElasticsearchSource) GetFeatures(ctx context.Context) (*geojson.FeatureCollection, error) {
-	tile := ctx.Value("tile").(maptile.Tile)
-	tileBounds := tile.Bound()
-
-	fc := geojson.NewFeatureCollection()
-
-	query := e.buildQuery(tileBounds)
-	Logger.Debugf("Built ES query: %v", query)
-
-	scroll := e.ES.Scroll(e.Index).Body(query).Size(ScrollSize)
-	for {
-		scrollCtx, scrollCancel := context.WithTimeout(ctx, ScrollTimeout)
-		defer scrollCancel()
-		results, err := scroll.Do(scrollCtx)
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return nil, err
-		}
-		Logger.Debugf("Scrolling %d hits", len(results.Hits.Hits))
-		for _, hit := range results.Hits.Hits {
-			feat, err := e.hitToFeature(hit)
-			if err != nil {
-				return nil, err
-			}
-			Logger.Debugf("Adding feature to layer: %+v", feat)
-			fc.Append(feat)
-		}
-		scrollCancel()
-	}
-	return fc, nil
 }
 
 func flatten(something interface{}, accum map[string]interface{}, prefixParts ...string) {
