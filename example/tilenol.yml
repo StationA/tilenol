@@ -1,15 +1,19 @@
-# Uncomment to enable Redis-based caching
-# cache:
-#   redis:
-#     host: localhost
-#     port: 6379
-#     ttl: 24h
+# Cache configuration (optional)
+cache:
+  redis:
+    host: localhost
+    port: 6379
+    ttl: 24h
+# Layer configuration
 layers:
   - name: buildings
     minzoom: 14
     source:
       elasticsearch:
-        host: localhost
+        host: es
         port: 9200
         index: buildings
         geometryField: geometry
+        sourceFields:
+          area_sqft: building.area_sqft
+          height_ft: building.height_ft

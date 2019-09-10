@@ -12,6 +12,8 @@ services:
     command: run
     environment:
       TILENOL_ENABLE_CORS: "true"
+    volumes:
+      - ./tilenol.yml:/tilenol.yml
     ports:
       - 3000:3000
       - 3001:3001
