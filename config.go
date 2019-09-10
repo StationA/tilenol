@@ -57,7 +57,7 @@ func ConfigFile(configFile *os.File) ConfigOption {
 	}
 }
 
-// Port hanges the port number used for serving tile data
+// Port changes the port number used for serving tile data
 func Port(port uint16) ConfigOption {
 	return func(s *Server) error {
 		s.Port = port
