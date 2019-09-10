@@ -42,6 +42,8 @@ type Server struct {
 	Cache        Cache
 }
 
+type Handler func(context.Context, io.Writer, *http.Request) error
+
 // NewServer creates a new server instance pre-configured with the given ConfigOption's
 func NewServer(configOpts ...ConfigOption) (*Server, error) {
 	s := &Server{}
@@ -108,11 +110,14 @@ func calculateSimplificationThreshold(minZoom, maxZoom, currentZoom int) float64
 	return p*float64(currentZoom-minZoom) + MaxSimplify
 }
 
-func (s *Server) cached(handler func(io.Writer, *http.Request)) func(http.ResponseWriter, *http.Request) {
+func (s *Server) cached(handler Handler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
 		defer func() {
-			if err := recover(); err != nil {
-				s.handleError(err.(error), w, r)
+			if ctx.Err() == context.Canceled {
+				Logger.Debugf("Request canceled by client")
+				w.WriteHeader(499)
+				return
 			}
 		}()
 
@@ -129,14 +134,18 @@ func (s *Server) cached(handler func(io.Writer, *http.Request)) func(http.Respon
 				Logger.Debugf("Key [%s] found in cache", key)
 				val, err := s.Cache.Get(key)
 				if err != nil {
-					panic(err)
+					s.handleError(err.(error), w, r)
+					return
 				}
 				buffer := bytes.NewBuffer(val)
 				io.Copy(w, buffer)
 			} else {
 				Logger.Debugf("Key [%s] is not cached", key)
 				var buffer bytes.Buffer
-				handler(&buffer, r)
+				herr := handler(ctx, &buffer, r)
+				if herr != nil {
+					return
+				}
 				err := s.Cache.Put(key, buffer.Bytes())
 				if err != nil {
 					// Log an error in case the key can't be stored in cache, but continue
@@ -145,7 +154,7 @@ func (s *Server) cached(handler func(io.Writer, *http.Request)) func(http.Respon
 				_, err = io.Copy(w, &buffer)
 			}
 		} else {
-			handler(w, r)
+			handler(ctx, w, r)
 		}
 	}
 }
@@ -172,7 +181,7 @@ func filterLayersByZoom(inLayers []Layer, z int) []Layer {
 	return outLayers
 }
 
-func (s *Server) getVectorTile(w io.Writer, r *http.Request) {
+func (s *Server) getVectorTile(rctx context.Context, w io.Writer, r *http.Request) error {
 	z, _ := strconv.Atoi(chi.URLParam(r, "z"))
 	x, _ := strconv.Atoi(chi.URLParam(r, "x"))
 	y, _ := strconv.Atoi(chi.URLParam(r, "y"))
@@ -184,7 +193,7 @@ func (s *Server) getVectorTile(w io.Writer, r *http.Request) {
 		layersToCompute = filterLayersByNames(layersToCompute, strings.Split(requestedLayers, ","))
 	}
 
-	eg, ectx := errgroup.WithContext(r.Context())
+	eg, ectx := errgroup.WithContext(rctx)
 	ctx := context.WithValue(ectx, "tile", tile)
 
 	fcLayers := make(mvt.Layers, len(layersToCompute))
@@ -214,19 +223,20 @@ func (s *Server) getVectorTile(w io.Writer, r *http.Request) {
 		})
 	}
 	if err := eg.Wait(); err != nil {
-		panic(err)
+		return err
 	}
 
 	// Lastly, marshal the object into the response output
 	data, marshalErr := mvt.MarshalGzipped(fcLayers)
 	if marshalErr != nil {
-		// TODO: Handle error
+		return marshalErr
 	}
-	_, _ = w.Write(data)
+	_, err := w.Write(data)
+	return err
 }
 
 func (s *Server) handleError(err error, w http.ResponseWriter, r *http.Request) {
-	Logger.Errorf("Tile request failed: %v", err)
+	Logger.Errorf("Tile request failed: %s", err.Error())
 
 	http.Error(w, err.Error(), http.StatusInternalServerError)
 }
