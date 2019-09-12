@@ -199,8 +199,9 @@ func (e *ElasticsearchSource) HitToFeature(hit *elastic.SearchHit) (*geojson.Fea
 		if found {
 			if val != nil {
 				feat.Properties[prop] = val
+			} else {
+				Logger.Warningf("Couldn't find value at field '%s' for feature '%s' on layer '%s'", fieldName, id, hit.Index)
 			}
-			return nil, fmt.Errorf("Couldn't find value at field: %s", fieldName)
 		}
 	}
 	feat.Properties["id"] = id
