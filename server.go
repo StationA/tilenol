@@ -32,6 +32,18 @@ const (
 	AllLayers = "_all"
 )
 
+// TileRequest is an object containing the tile request context
+type TileRequest struct {
+	X int
+	Y int
+	Z int
+}
+
+// MapTile creates a maptile.Tile object from the TileRequest
+func (t *TileRequest) MapTile() maptile.Tile {
+	return maptile.New(uint32(t.X), uint32(t.Y), maptile.Zoom(t.Z))
+}
+
 // Server is a tilenol server instance
 type Server struct {
 	// Port is the port number to bind the tile server
@@ -64,8 +76,7 @@ func NewServer(configOpts ...ConfigOption) (*Server, error) {
 	return s, nil
 }
 
-// Start actually starts the server instance. Note that this blocks until an interrupting signal
-func (s *Server) Start() {
+func (s *Server) setupRoutes() (*chi.Mux, *chi.Mux) {
 	r := chi.NewRouter()
 
 	//-- MIDDLEWARE
@@ -93,6 +104,13 @@ func (s *Server) Start() {
 
 	i := chi.NewRouter()
 	i.Get("/healthcheck", s.healthCheck)
+
+	return r, i
+}
+
+// Start actually starts the server instance. Note that this blocks until an interrupting signal
+func (s *Server) Start() {
+	r, i := s.setupRoutes()
 
 	go func() {
 		log.Fatalln(http.ListenAndServe(fmt.Sprintf(":%d", s.Port), r))
@@ -135,41 +153,35 @@ func (s *Server) cached(handler Handler) http.HandlerFunc {
 			}
 		}()
 
+		var buffer bytes.Buffer
+		key := r.URL.RequestURI()
+		if s.Cache.Exists(key) {
+			Logger.Debugf("Key [%s] found in cache", key)
+			val, err := s.Cache.Get(key)
+			if err != nil {
+				s.handleError(err.(error), w, r)
+				return
+			}
+			buffer.Write(val)
+		} else {
+			Logger.Debugf("Key [%s] is not cached", key)
+			herr := handler(ctx, &buffer, r)
+			if herr != nil {
+				return
+			}
+			err := s.Cache.Put(key, buffer.Bytes())
+			if err != nil {
+				// Log an error in case the key can't be stored in cache, but continue
+				Logger.Warnf("Could not store key [%s] in cache: %v", key, err)
+			}
+		}
 		// Set standard response headers
 		// TODO: Use the cache TTL to determine the Cache-Control
 		w.Header().Set("Cache-Control", "max-age=86400")
 		w.Header().Set("Content-Encoding", "gzip")
 		// TODO: Store the content type somehow in the cache?
 		w.Header().Set("Content-Type", "application/x-protobuf")
-
-		if s.Cache != nil {
-			key := r.URL.RequestURI()
-			if s.Cache.Exists(key) {
-				Logger.Debugf("Key [%s] found in cache", key)
-				val, err := s.Cache.Get(key)
-				if err != nil {
-					s.handleError(err.(error), w, r)
-					return
-				}
-				buffer := bytes.NewBuffer(val)
-				io.Copy(w, buffer)
-			} else {
-				Logger.Debugf("Key [%s] is not cached", key)
-				var buffer bytes.Buffer
-				herr := handler(ctx, &buffer, r)
-				if herr != nil {
-					return
-				}
-				err := s.Cache.Put(key, buffer.Bytes())
-				if err != nil {
-					// Log an error in case the key can't be stored in cache, but continue
-					Logger.Errorf("Could not store key [%s] in cache: %v", key, err)
-				}
-				_, err = io.Copy(w, &buffer)
-			}
-		} else {
-			handler(ctx, w, r)
-		}
+		io.Copy(w, &buffer)
 	}
 }
 
@@ -204,28 +216,29 @@ func (s *Server) getVectorTile(rctx context.Context, w io.Writer, r *http.Reques
 	x, _ := strconv.Atoi(chi.URLParam(r, "x"))
 	y, _ := strconv.Atoi(chi.URLParam(r, "y"))
 	requestedLayers := chi.URLParam(r, "layers")
-	tile := maptile.New(uint32(x), uint32(y), maptile.Zoom(z))
+	req := &TileRequest{x, y, z}
 
 	var layersToCompute = filterLayersByZoom(s.Layers, z)
 	if requestedLayers != AllLayers {
 		layersToCompute = filterLayersByNames(layersToCompute, strings.Split(requestedLayers, ","))
 	}
 
-	eg, ectx := errgroup.WithContext(rctx)
-	ctx := context.WithValue(ectx, "tile", tile)
+	// Create an errgroup with the request context so that we can get cancellable,
+	// fork-join parallelism behavior
+	eg, ctx := errgroup.WithContext(rctx)
 
 	fcLayers := make(mvt.Layers, len(layersToCompute))
 	for i, layer := range layersToCompute {
 		i, layer := i, layer // Fun stuff: https://blog.cloudflare.com/a-go-gotcha-when-closures-and-goroutines-collide/
 		eg.Go(func() error {
 			Logger.Debugf("Retrieving vector tile for layer [%s] @ (%d, %d, %d)", layer.Name, x, y, z)
-			fc, err := layer.Source.GetFeatures(ctx)
+			fc, err := layer.Source.GetFeatures(ctx, req)
 			if err != nil {
 				return err
 			}
 			fcLayer := mvt.NewLayer(layer.Name, fc)
 			fcLayer.Version = 2 // Set to tile spec v2
-			fcLayer.ProjectToTile(tile)
+			fcLayer.ProjectToTile(req.MapTile())
 			fcLayer.Clip(mvt.MapboxGLDefaultExtentBound)
 
 			if s.Simplify {
@@ -240,7 +253,9 @@ func (s *Server) getVectorTile(rctx context.Context, w io.Writer, r *http.Reques
 			return nil
 		})
 	}
+	// Wait for all of the goroutines spawned in this errgroup to complete or fail
 	if err := eg.Wait(); err != nil {
+		// If any of them fail, return the error
 		return err
 	}
 

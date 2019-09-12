@@ -10,8 +10,14 @@ format:
 build: deps
 	go build -o target/tilenol -ldflags="-X main.Version=${VERSION} -X main.Commitish=${COMMITISH}" ./cmd/...
 
+lint: format
+	golint github.com/stationa/tilenol
+
 test: build
-	go test -v ./...
+	go test -v -coverprofile=/tmp/tilenol.coverage.out ./...
+
+coverage: test
+	go tool cover -func=/tmp/tilenol.coverage.out
 
 install: test
 	go install -ldflags="-X main.Version=${VERSION} -X main.Commitish=${COMMITISH}" ./cmd/...

@@ -54,7 +54,9 @@ func (r *RedisCache) Exists(key string) bool {
 // Get retrieves the cached value for a given key
 func (r *RedisCache) Get(key string) ([]byte, error) {
 	val, err := r.Client.Get(key).Bytes()
-	if err != nil {
+	if err == redis.Nil {
+		return nil, ErrNoValue
+	} else if err != nil {
 		return []byte{}, err
 	}
 	return val, nil

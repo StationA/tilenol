@@ -29,8 +29,8 @@ type LayerConfig struct {
 
 // Source is a generic interface for all feature data sources
 type Source interface {
-	// GetFeatures retrieves the GeoJSON FeatureCollection for the given request context
-	GetFeatures(context.Context) (*geojson.FeatureCollection, error)
+	// GetFeatures retrieves the GeoJSON FeatureCollection for the given request
+	GetFeatures(context.Context, *TileRequest) (*geojson.FeatureCollection, error)
 }
 
 // Layer is a configured, hydrated tile server layer

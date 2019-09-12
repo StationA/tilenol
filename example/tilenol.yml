@@ -1,9 +1,9 @@
 # Cache configuration (optional)
-cache:
-  redis:
-    host: localhost
-    port: 6379
-    ttl: 24h
+# cache:
+#   redis:
+#     host: localhost
+#     port: 6379
+#     ttl: 24h
 # Layer configuration
 layers:
   - name: buildings

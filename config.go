@@ -37,13 +37,11 @@ func ConfigFile(configFile *os.File) ConfigOption {
 		if err != nil {
 			return err
 		}
-		if config.Cache != nil {
-			cache, err := CreateCache(config.Cache)
-			if err != nil {
-				return err
-			}
-			s.Cache = cache
+		cache, err := CreateCache(config.Cache)
+		if err != nil {
+			return err
 		}
+		s.Cache = cache
 		var layers []Layer
 		for _, layerConfig := range config.Layers {
 			layer, err := CreateLayer(layerConfig)
@@ -79,7 +77,7 @@ func EnableCORS(s *Server) error {
 	return nil
 }
 
-// Simplify shapes enable geometry simplification based on the requested zoom level
+// SimplifyShapes enables geometry simplification based on the requested zoom level
 func SimplifyShapes(s *Server) error {
 	s.Simplify = true
 	return nil

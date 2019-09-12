@@ -15,6 +15,7 @@ import (
 
 const (
 	// TODO: Externalize these?
+
 	// ScrollSize is the max number of documents per scroll page
 	ScrollSize = 250
 	// ScrollTimeout is the time.Duration to keep the scroll context alive
@@ -61,6 +62,11 @@ func (d *Dict) Source() (interface{}, error) {
 	return d, nil
 }
 
+// Map is a helper method to cleanly alias back to map[string]interface{}
+func (d *Dict) Map() map[string]interface{} {
+	return *d
+}
+
 // NewElasticsearchSource creates a new Source that retrieves feature data from an
 // Elasticsearch cluster
 func NewElasticsearchSource(config *ElasticsearchConfig) (Source, error) {
@@ -83,28 +89,9 @@ func NewElasticsearchSource(config *ElasticsearchConfig) (Source, error) {
 
 // GetFeatures implements the Source interface, to get feature data from an
 // Elasticsearch cluster
-func (e *ElasticsearchSource) GetFeatures(ctx context.Context) (*geojson.FeatureCollection, error) {
+func (e *ElasticsearchSource) GetFeatures(ctx context.Context, req *TileRequest) (*geojson.FeatureCollection, error) {
 	// TODO: Add optional support for other query constructs? (e.g. aggregations)
-	return e.doGetFeatures(ctx)
-}
-
-// boundsFilter converts an XYZ map tile into an Elasticsearch-friendly geo_shape query
-func (e *ElasticsearchSource) boundsFilter(tile maptile.Tile) *Dict {
-	tileBounds := tile.Bound()
-	return &Dict{
-		"geo_shape": Dict{
-			e.GeometryField: Dict{
-				"shape": Dict{
-					"type": "envelope",
-					"coordinates": [][]float64{
-						{tileBounds.Left(), tileBounds.Top()},
-						{tileBounds.Right(), tileBounds.Bottom()},
-					},
-				},
-				"relation": "intersects",
-			},
-		},
-	}
+	return e.doGetFeatures(ctx, req)
 }
 
 // getSourceFields returns the list of source fields to include in the fetched features
@@ -127,11 +114,29 @@ func (e *ElasticsearchSource) newSearchSource(query elastic.Query) *elastic.Sear
 		Query(query)
 }
 
+// boundsFilter converts an XYZ map tile into an Elasticsearch-friendly geo_shape query
+func boundsFilter(geometryField string, tile maptile.Tile) *Dict {
+	tileBounds := tile.Bound()
+	return &Dict{
+		"geo_shape": map[string]interface{}{
+			geometryField: map[string]interface{}{
+				"shape": map[string]interface{}{
+					"type": "envelope",
+					"coordinates": [][]float64{
+						{tileBounds.Left(), tileBounds.Top()},
+						{tileBounds.Right(), tileBounds.Bottom()},
+					},
+				},
+				"relation": "intersects",
+			},
+		},
+	}
+}
+
 // doGetFeatures scrolls the configured Elasticsearch index for all documents that fall
 // within the tile boundaries
-func (e *ElasticsearchSource) doGetFeatures(ctx context.Context) (*geojson.FeatureCollection, error) {
-	tile := ctx.Value("tile").(maptile.Tile)
-	query := elastic.NewBoolQuery().Filter(e.boundsFilter(tile))
+func (e *ElasticsearchSource) doGetFeatures(ctx context.Context, req *TileRequest) (*geojson.FeatureCollection, error) {
+	query := elastic.NewBoolQuery().Filter(boundsFilter(e.GeometryField, req.MapTile()))
 	ss := e.newSearchSource(query)
 	s, _ := ss.Source()
 	Logger.Debugf("Search source: %#v", s)
