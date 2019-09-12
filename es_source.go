@@ -197,7 +197,11 @@ func (e *ElasticsearchSource) HitToFeature(hit *elastic.SearchHit) (*geojson.Fea
 	for prop, fieldName := range e.SourceFields {
 		val, found := GetNested(source, strings.Split(fieldName, "."))
 		if found {
-			feat.Properties[prop] = val
+			if val != nil {
+				feat.Properties[prop] = val
+			} else {
+				Logger.Warningf("Couldn't find value at field '%s' for feature '%s' on layer '%s'", fieldName, id, hit.Index)
+			}
 		}
 	}
 	feat.Properties["id"] = id
