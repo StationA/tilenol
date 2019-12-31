@@ -39,6 +39,32 @@ type TileRequest struct {
 	Z int
 }
 
+// Error type for HTTP Status code 400
+type InvalidRequestError struct {
+	s string
+}
+
+func (f InvalidRequestError) Error() string {
+	return f.s
+}
+
+// Sanitize TileRequest arguments and return an error if sanity checking fails.
+func MakeTileRequest(x int, y int, z int) (*TileRequest, error) {
+	if z < MinZoom || z > MaxZoom {
+		return nil, InvalidRequestError{fmt.Sprintf("Invalid zoom level: [%d].", z)}
+	}
+	maxTileIdx :=  1<<uint32(z) - 1
+	if x < 0 || x > maxTileIdx {
+		return nil, InvalidRequestError{fmt.Sprintf("Invalid X value [%d] for zoom level [%d].", x, z)}
+	}
+	if y < 0 || y > maxTileIdx {
+		return nil, InvalidRequestError{fmt.Sprintf("Invalid Y value [%d] for zoom level [%d].", y, z)}
+	}
+
+	return &TileRequest{x, y, z}, nil
+}
+
+
 // MapTile creates a maptile.Tile object from the TileRequest
 func (t *TileRequest) MapTile() maptile.Tile {
 	return maptile.New(uint32(t.X), uint32(t.Y), maptile.Zoom(t.Z))
@@ -167,6 +193,7 @@ func (s *Server) cached(handler Handler) http.HandlerFunc {
 			Logger.Debugf("Key [%s] is not cached", key)
 			herr := handler(ctx, &buffer, r)
 			if herr != nil {
+				s.handleError(herr.(error), w, r)
 				return
 			}
 			err := s.Cache.Put(key, buffer.Bytes())
@@ -216,7 +243,10 @@ func (s *Server) getVectorTile(rctx context.Context, w io.Writer, r *http.Reques
 	x, _ := strconv.Atoi(chi.URLParam(r, "x"))
 	y, _ := strconv.Atoi(chi.URLParam(r, "y"))
 	requestedLayers := chi.URLParam(r, "layers")
-	req := &TileRequest{x, y, z}
+	req, err := MakeTileRequest(x, y, z)
+	if err != nil {
+		return err
+	}
 
 	var layersToCompute = filterLayersByZoom(s.Layers, z)
 	if requestedLayers != AllLayers {
@@ -264,12 +294,19 @@ func (s *Server) getVectorTile(rctx context.Context, w io.Writer, r *http.Reques
 	if marshalErr != nil {
 		return marshalErr
 	}
-	_, err := w.Write(data)
+	_, err = w.Write(data)
 	return err
 }
 
 // handleError is a helper function to generate a generic tile server error response
 func (s *Server) handleError(err error, w http.ResponseWriter, r *http.Request) {
-	Logger.Errorf("Tile request failed: %s", err.Error())
-	http.Error(w, err.Error(), http.StatusInternalServerError)
+	var errCode int
+	switch err.(type) {
+	case InvalidRequestError:
+		errCode = http.StatusBadRequest
+	default:
+		errCode = http.StatusInternalServerError
+	}
+	Logger.Errorf("Tile request failed: %s (HTTP error %d)", err.Error(), errCode)
+	http.Error(w, err.Error(), errCode)
 }
