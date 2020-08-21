@@ -136,7 +136,10 @@ func boundsFilter(geometryField string, tile maptile.Tile) *Dict {
 // doGetFeatures scrolls the configured Elasticsearch index for all documents that fall
 // within the tile boundaries
 func (e *ElasticsearchSource) doGetFeatures(ctx context.Context, req *TileRequest) (*geojson.FeatureCollection, error) {
-	query := elastic.NewBoolQuery().Filter(boundsFilter(e.GeometryField, req.MapTile()))
+	var query = elastic.NewBoolQuery().Filter(boundsFilter(e.GeometryField, req.MapTile()))
+	if qs := req.Request.URL.Query().Get("q"); qs != "" {
+		query = query.Filter(elastic.NewQueryStringQuery(qs))
+	}
 	ss := e.newSearchSource(query)
 	s, _ := ss.Source()
 	Logger.Debugf("Search source: %#v", s)

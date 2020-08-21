@@ -34,9 +34,10 @@ const (
 
 // TileRequest is an object containing the tile request context
 type TileRequest struct {
-	X int
-	Y int
-	Z int
+	Request *http.Request
+	X       int
+	Y       int
+	Z       int
 }
 
 // Error type for HTTP Status code 400
@@ -49,11 +50,11 @@ func (f InvalidRequestError) Error() string {
 }
 
 // Sanitize TileRequest arguments and return an error if sanity checking fails.
-func MakeTileRequest(x int, y int, z int) (*TileRequest, error) {
+func MakeTileRequest(req *http.Request, x int, y int, z int) (*TileRequest, error) {
 	if z < MinZoom || z > MaxZoom {
 		return nil, InvalidRequestError{fmt.Sprintf("Invalid zoom level: [%d].", z)}
 	}
-	maxTileIdx :=  1<<uint32(z) - 1
+	maxTileIdx := 1<<uint32(z) - 1
 	if x < 0 || x > maxTileIdx {
 		return nil, InvalidRequestError{fmt.Sprintf("Invalid X value [%d] for zoom level [%d].", x, z)}
 	}
@@ -61,9 +62,8 @@ func MakeTileRequest(x int, y int, z int) (*TileRequest, error) {
 		return nil, InvalidRequestError{fmt.Sprintf("Invalid Y value [%d] for zoom level [%d].", y, z)}
 	}
 
-	return &TileRequest{x, y, z}, nil
+	return &TileRequest{req, x, y, z}, nil
 }
-
 
 // MapTile creates a maptile.Tile object from the TileRequest
 func (t *TileRequest) MapTile() maptile.Tile {
@@ -243,7 +243,7 @@ func (s *Server) getVectorTile(rctx context.Context, w io.Writer, r *http.Reques
 	x, _ := strconv.Atoi(chi.URLParam(r, "x"))
 	y, _ := strconv.Atoi(chi.URLParam(r, "y"))
 	requestedLayers := chi.URLParam(r, "layers")
-	req, err := MakeTileRequest(x, y, z)
+	req, err := MakeTileRequest(r, x, y, z)
 	if err != nil {
 		return err
 	}
