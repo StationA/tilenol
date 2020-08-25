@@ -137,7 +137,7 @@ func boundsFilter(geometryField string, tile maptile.Tile) *Dict {
 // within the tile boundaries
 func (e *ElasticsearchSource) doGetFeatures(ctx context.Context, req *TileRequest) (*geojson.FeatureCollection, error) {
 	var query = elastic.NewBoolQuery().Filter(boundsFilter(e.GeometryField, req.MapTile()))
-	if qs := req.Request.URL.Query().Get("q"); qs != "" {
+	if qs, exists := req.Args["q"]; exists && qs != "" {
 		query = query.Filter(elastic.NewQueryStringQuery(qs))
 	}
 	ss := e.newSearchSource(query)

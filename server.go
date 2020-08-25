@@ -34,10 +34,10 @@ const (
 
 // TileRequest is an object containing the tile request context
 type TileRequest struct {
-	Request *http.Request
-	X       int
-	Y       int
-	Z       int
+	X    int
+	Y    int
+	Z    int
+	Args map[string]string
 }
 
 // Error type for HTTP Status code 400
@@ -62,7 +62,12 @@ func MakeTileRequest(req *http.Request, x int, y int, z int) (*TileRequest, erro
 		return nil, InvalidRequestError{fmt.Sprintf("Invalid Y value [%d] for zoom level [%d].", y, z)}
 	}
 
-	return &TileRequest{req, x, y, z}, nil
+	args := make(map[string]string)
+	for k, values := range req.URL.Query() {
+		args[k] = values[0] // TODO: Should we consider supporting multi-parameters?
+	}
+
+	return &TileRequest{x, y, z, args}, nil
 }
 
 // MapTile creates a maptile.Tile object from the TileRequest
