@@ -153,7 +153,7 @@ func boundsFilter(geometryField string, tile maptile.Tile) *Dict {
 }
 
 // Given the list of extra source arguments that were specified with request, transform
-// these into a map of property name to ES document source path, or return an erorr
+// these into a map of property name to ES document source path, or return an error
 // if there is a malformed extra source argument.
 func makeFieldMap(incArgs []string) (map[string]string, error) {
 	var result = make(map[string]string);
