@@ -87,14 +87,14 @@ func NewElasticsearchSource(config *ElasticsearchConfig) (Source, error) {
 	}, nil
 }
 
-// Create a new ElasticsearchSource from the input object, but add extra features
+// Create a new ElasticsearchSource from the input object, but add extra SourceFields
 // to include to the new ElasticsearchSource instance.
-func (e *ElasticsearchSource) addExtraFeatures(extraFeatures map[string]string) *ElasticsearchSource {
+func (e *ElasticsearchSource) addExtraFields(extraFields map[string]string) *ElasticsearchSource {
 	sourceFields := make(map[string]string)
 	for k, v := range e.SourceFields {
 		sourceFields[k] = v;
 	}
-	for k, v := range extraFeatures {
+	for k, v := range extraFields {
 		sourceFields[k] = v;
 	}
 	return &ElasticsearchSource{
@@ -187,7 +187,7 @@ func (e *ElasticsearchSource) doGetFeatures(ctx context.Context, req *TileReques
 		}
 		// Instead of the original ElasticsearchSource use one that is augmented with the extra
 		// source field requests for the remainder of this request.
-		e = e.addExtraFeatures(extraFields);
+		e = e.addExtraFields(extraFields);
 	}
 
 	ss := e.newSearchSource(query)
