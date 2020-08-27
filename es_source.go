@@ -89,7 +89,7 @@ func NewElasticsearchSource(config *ElasticsearchConfig) (Source, error) {
 
 // Create a new ElasticsearchSource from the input object, but add extra SourceFields
 // to include to the new ElasticsearchSource instance.
-func (e *ElasticsearchSource) addExtraFields(extraFields map[string]string) *ElasticsearchSource {
+func (e *ElasticsearchSource) withExtraFields(extraFields map[string]string) *ElasticsearchSource {
 	sourceFields := make(map[string]string)
 	for k, v := range e.SourceFields {
 		sourceFields[k] = v
@@ -173,7 +173,7 @@ func makeFieldMap(incArgs []string) (map[string]string, error) {
 func (e *ElasticsearchSource) doGetFeatures(ctx context.Context, req *TileRequest) (*geojson.FeatureCollection, error) {
 	// Check for optional ES query argument.
 	var query = elastic.NewBoolQuery().Filter(boundsFilter(e.GeometryField, req.MapTile()))
-	if qs, exists := req.Args["q"]; exists && qs[0] != "" { // TODO: We ignore all but the first "q" arg.
+	if qs, exists := req.Args["q"]; exists && len(qs) > 0 { // TODO: We ignore all but the first "q" arg.
 		query = query.Filter(elastic.NewQueryStringQuery(qs[0]))
 	}
 
@@ -186,7 +186,7 @@ func (e *ElasticsearchSource) doGetFeatures(ctx context.Context, req *TileReques
 		}
 		// Instead of the original ElasticsearchSource use one that is augmented with the extra
 		// source field requests for the remainder of this request.
-		e = e.addExtraFields(extraFields)
+		e = e.withExtraFields(extraFields)
 	}
 
 	ss := e.newSearchSource(query)
