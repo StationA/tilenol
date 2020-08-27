@@ -92,10 +92,10 @@ func NewElasticsearchSource(config *ElasticsearchConfig) (Source, error) {
 func (e *ElasticsearchSource) addExtraFields(extraFields map[string]string) *ElasticsearchSource {
 	sourceFields := make(map[string]string)
 	for k, v := range e.SourceFields {
-		sourceFields[k] = v;
+		sourceFields[k] = v
 	}
 	for k, v := range extraFields {
-		sourceFields[k] = v;
+		sourceFields[k] = v
 	}
 	return &ElasticsearchSource{
 		ES:            e.ES,
@@ -104,7 +104,6 @@ func (e *ElasticsearchSource) addExtraFields(extraFields map[string]string) *Ela
 		SourceFields:  sourceFields,
 	}
 }
-
 
 // GetFeatures implements the Source interface, to get feature data from an
 // Elasticsearch cluster
@@ -156,17 +155,17 @@ func boundsFilter(geometryField string, tile maptile.Tile) *Dict {
 // these into a map of property name to ES document source path, or return an error
 // if there is a malformed extra source argument.
 func makeFieldMap(incArgs []string) (map[string]string, error) {
-	var result = make(map[string]string);
+	var result = make(map[string]string)
 
 	for _, source := range incArgs {
-		splits := strings.SplitN(source, ":", 2);
+		splits := strings.SplitN(source, ":", 2)
 		if len(splits) < 2 {
-			return nil, InvalidRequestError{fmt.Sprintf("Invalid source field specification: '%s'", source)};
+			return nil, InvalidRequestError{fmt.Sprintf("Invalid source field specification: '%s'", source)}
 		}
-		result[splits[0]] = splits[1];
+		result[splits[0]] = splits[1]
 	}
 
-	return result, nil;
+	return result, nil
 }
 
 // doGetFeatures scrolls the configured Elasticsearch index for all documents that fall
@@ -181,13 +180,13 @@ func (e *ElasticsearchSource) doGetFeatures(ctx context.Context, req *TileReques
 	// Check for extra fields specifications. They must have the form of <property_name>:<ES_document_path>,
 	// eg: levels:building.stories.
 	if inc_args, exists := req.Args["s"]; exists {
-		extraFields, err := makeFieldMap(inc_args);
+		extraFields, err := makeFieldMap(inc_args)
 		if err != nil {
-			return nil, err;
+			return nil, err
 		}
 		// Instead of the original ElasticsearchSource use one that is augmented with the extra
 		// source field requests for the remainder of this request.
-		e = e.addExtraFields(extraFields);
+		e = e.addExtraFields(extraFields)
 	}
 
 	ss := e.newSearchSource(query)
