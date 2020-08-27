@@ -87,6 +87,24 @@ func NewElasticsearchSource(config *ElasticsearchConfig) (Source, error) {
 	}, nil
 }
 
+// Create a new ElasticsearchSource from the input object, but add extra SourceFields
+// to include to the new ElasticsearchSource instance.
+func (e *ElasticsearchSource) withExtraFields(extraFields map[string]string) *ElasticsearchSource {
+	sourceFields := make(map[string]string)
+	for k, v := range e.SourceFields {
+		sourceFields[k] = v
+	}
+	for k, v := range extraFields {
+		sourceFields[k] = v
+	}
+	return &ElasticsearchSource{
+		ES:            e.ES,
+		Index:         e.Index,
+		GeometryField: e.GeometryField,
+		SourceFields:  sourceFields,
+	}
+}
+
 // GetFeatures implements the Source interface, to get feature data from an
 // Elasticsearch cluster
 func (e *ElasticsearchSource) GetFeatures(ctx context.Context, req *TileRequest) (*geojson.FeatureCollection, error) {
@@ -133,13 +151,44 @@ func boundsFilter(geometryField string, tile maptile.Tile) *Dict {
 	}
 }
 
+// Given the list of extra source arguments that were specified with request, transform
+// these into a map of property name to ES document source path, or return an error
+// if there is a malformed extra source argument.
+func makeFieldMap(incArgs []string) (map[string]string, error) {
+	var result = make(map[string]string)
+
+	for _, source := range incArgs {
+		splits := strings.SplitN(source, ":", 2)
+		if len(splits) < 2 {
+			return nil, InvalidRequestError{fmt.Sprintf("Invalid source field specification: '%s'", source)}
+		}
+		result[splits[0]] = splits[1]
+	}
+
+	return result, nil
+}
+
 // doGetFeatures scrolls the configured Elasticsearch index for all documents that fall
 // within the tile boundaries
 func (e *ElasticsearchSource) doGetFeatures(ctx context.Context, req *TileRequest) (*geojson.FeatureCollection, error) {
+	// Check for optional ES query argument.
 	var query = elastic.NewBoolQuery().Filter(boundsFilter(e.GeometryField, req.MapTile()))
-	if qs, exists := req.Args["q"]; exists && qs != "" {
-		query = query.Filter(elastic.NewQueryStringQuery(qs))
+	if qs, exists := req.Args["q"]; exists && len(qs) > 0 { // TODO: We ignore all but the first "q" arg.
+		query = query.Filter(elastic.NewQueryStringQuery(qs[0]))
 	}
+
+	// Check for extra fields specifications. They must have the form of <property_name>:<ES_document_path>,
+	// eg: levels:building.stories.
+	if inc_args, exists := req.Args["s"]; exists {
+		extraFields, err := makeFieldMap(inc_args)
+		if err != nil {
+			return nil, err
+		}
+		// Instead of the original ElasticsearchSource use one that is augmented with the extra
+		// source field requests for the remainder of this request.
+		e = e.withExtraFields(extraFields)
+	}
+
 	ss := e.newSearchSource(query)
 	s, _ := ss.Source()
 	Logger.Debugf("Search source: %#v", s)

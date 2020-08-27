@@ -37,7 +37,7 @@ type TileRequest struct {
 	X    int
 	Y    int
 	Z    int
-	Args map[string]string
+	Args map[string][]string
 }
 
 // Error type for HTTP Status code 400
@@ -62,9 +62,9 @@ func MakeTileRequest(req *http.Request, x int, y int, z int) (*TileRequest, erro
 		return nil, InvalidRequestError{fmt.Sprintf("Invalid Y value [%d] for zoom level [%d].", y, z)}
 	}
 
-	args := make(map[string]string)
+	args := make(map[string][]string)
 	for k, values := range req.URL.Query() {
-		args[k] = values[0] // TODO: Should we consider supporting multi-parameters?
+		args[k] = values
 	}
 
 	return &TileRequest{x, y, z, args}, nil
