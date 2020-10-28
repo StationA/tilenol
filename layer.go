@@ -11,6 +11,8 @@ import (
 type SourceConfig struct {
 	// Elasticsearch is an optional YAML key for configuring an ElasticsearchConfig
 	Elasticsearch *ElasticsearchConfig `yaml:"elasticsearch"`
+	// PostGIS is an optional YAML key for configuring a PostGISConfig
+	PostGIS *PostGISConfig `yaml:"postgis"`
 }
 
 // LayerConfig represents a general YAML layer configuration object
@@ -53,6 +55,14 @@ func CreateLayer(layerConfig LayerConfig) (*Layer, error) {
 	// TODO: How can we make this more generic?
 	if layerConfig.Source.Elasticsearch != nil {
 		source, err := NewElasticsearchSource(layerConfig.Source.Elasticsearch)
+		if err != nil {
+			return nil, err
+		}
+		layer.Source = source
+		return layer, nil
+	}
+	if layerConfig.Source.PostGIS != nil {
+		source, err := NewPostGISSource(layerConfig.Source.PostGIS)
 		if err != nil {
 			return nil, err
 		}

@@ -1,0 +1,23 @@
+# Cache configuration (optional)
+# cache:
+#   redis:
+#     host: localhost
+#     port: 6379
+#     ttl: 24h
+# Layer configuration
+layers:
+  - name: buildings
+    minzoom: 14
+    source:
+      postgis:
+        host: localhost
+        port: 5432
+        database: postgres
+        user: postgres
+        password: ""
+        schema: tilenol
+        table: buildings
+        geometryField: geometry
+        sourceFields:
+          area_sqft: area_sqft
+          height_ft: height_ft
