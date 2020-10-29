@@ -1,8 +1,12 @@
 package tilenol
 
 import (
+	"bytes"
 	"database/sql"
 	"time"
+
+	"github.com/paulmach/orb"
+	"github.com/paulmach/orb/encoding/wkb"
 )
 
 func RowsToMaps(rows *sql.Rows) ([]map[string]interface{}, error) {
@@ -25,7 +29,9 @@ func RowsToMaps(rows *sql.Rows) ([]map[string]interface{}, error) {
 		m := make(map[string]interface{})
 		for idx, col := range cols {
 			var scanner = row[idx].(*MetalScanner)
-			m[col] = scanner.value
+			if scanner.valid {
+				m[col] = scanner.value
+			}
 		}
 		maps = append(maps, m)
 	}
@@ -43,6 +49,15 @@ func (scanner *MetalScanner) getBytes(src interface{}) []byte {
 		return a
 	}
 	return nil
+}
+
+func (scanner *MetalScanner) tryDecodeGeo(data []byte) (orb.Geometry, error) {
+	dec := wkb.NewDecoder(bytes.NewBuffer(data))
+	geom, err := dec.Decode()
+	if err != nil {
+		return nil, err
+	}
+	return geom, nil
 }
 
 func (scanner *MetalScanner) Scan(src interface{}) error {
@@ -63,13 +78,18 @@ func (scanner *MetalScanner) Scan(src interface{}) error {
 			scanner.valid = true
 		}
 	case string:
-		value := scanner.getBytes(src)
-		scanner.value = string(value)
+		scanner.value = src
 		scanner.valid = true
 	case []byte:
-		value := scanner.getBytes(src)
-		scanner.value = value
-		scanner.valid = true
+		geom, err := scanner.tryDecodeGeo(src.([]byte))
+		if err != nil {
+			value := scanner.getBytes(src)
+			scanner.value = value
+			scanner.valid = true
+		} else {
+			scanner.value = geom
+			scanner.valid = true
+		}
 	case time.Time:
 		if value, ok := src.(time.Time); ok {
 			scanner.value = value

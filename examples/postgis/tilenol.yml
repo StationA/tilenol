@@ -10,14 +10,11 @@ layers:
     minzoom: 14
     source:
       postgis:
-        host: localhost
-        port: 5432
-        database: postgres
-        user: postgres
-        password: ""
+        dsn: host=localhost port=5432 dbname=postgres user=postgres sslmode=disable
         schema: tilenol
         table: buildings
         geometryField: geometry
         sourceFields:
-          area_sqft: area_sqft
-          height_ft: height_ft
+          id: id
+          name: name
+          height: height

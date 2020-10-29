@@ -23,6 +23,13 @@
         bottom: 0;
         width: 100%;
       }
+      .props {
+        min-width: 240px;
+      }
+      .props tr td:first-child {
+        font-weight: bold;
+        text-transform: uppercase;
+      }
     </style>
   </head>
   <body>
@@ -44,9 +51,7 @@
           type: "fill-extrusion",
           source: {
             type: "vector",
-            tiles: [
-              "http://localhost:3000/buildings/{z}/{x}/{y}.mvt?source=height",
-            ],
+            tiles: ["http://localhost:3000/buildings/{z}/{x}/{y}.mvt"],
           },
           "source-layer": "buildings",
           paint: {
@@ -54,6 +59,21 @@
             "fill-extrusion-height": ["get", "height"],
             "fill-extrusion-opacity": 1,
           },
+        });
+
+        map.on("click", "tilenol", function (e) {
+          var attrs = Object.entries(e.features[0].properties).map(function (
+            entry
+          ) {
+            var k = entry[0];
+            var v = entry[1];
+            return "<tr><td>" + k + "</td><td>" + v + "</td></tr>";
+          });
+          var popupHTML = "<table class='props'>" + attrs.join("") + "</table>";
+          new mapboxgl.Popup()
+            .setLngLat(e.lngLat)
+            .setHTML(popupHTML)
+            .addTo(map);
         });
       });
     </script>
