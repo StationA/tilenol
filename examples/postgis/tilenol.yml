@@ -18,3 +18,4 @@ layers:
           id: id
           name: name
           height: height
+          area_sqft: (ST_Area(geometry::geography) / POWER(0.3048,2))::INTEGER

@@ -73,7 +73,7 @@ func (p *PostGISSource) buildSQL(bounds orb.Bound) (string, error) {
 		goqu.Func("ST_AsBinary", goqu.I(p.GeometryField)).As(p.GeometryField),
 	}
 	for dst, src := range p.SourceFields {
-		sourceColExpression := goqu.I(src).As(dst)
+		sourceColExpression := goqu.L(src).As(dst)
 		selectColumns = append(selectColumns, sourceColExpression)
 	}
 	var relation = goqu.T(p.Table)
@@ -96,6 +96,7 @@ func (p *PostGISSource) GetFeatures(ctx context.Context, req *TileRequest) (*geo
 	if err != nil {
 		return nil, err
 	}
+	Logger.Debugf("Executing SQL: %s\n", sql)
 	rows, err := p.DB.Query(sql)
 	if err != nil {
 		return nil, err

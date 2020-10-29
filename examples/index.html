@@ -43,6 +43,16 @@
         zoom: 15,
         pitch: 45,
         container: "map",
+        transformRequest: function (url, resourceType) {
+          if (resourceType === "Tile" && url.indexOf("http://localhost") > -1) {
+            return {
+              url: url,
+              headers: {
+                "Cache-Control": "no-cache",
+              },
+            };
+          }
+        },
       });
 
       map.on("load", function () {
