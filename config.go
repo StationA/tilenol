@@ -3,7 +3,7 @@ package tilenol
 import (
 	"os"
 
-	"gopkg.in/go-yaml/yaml.v2"
+	"gopkg.in/yaml.v3"
 )
 
 // Config is a YAML server configuration object
@@ -17,7 +17,6 @@ type Config struct {
 // LoadConfig loads the configuration from disk, and decodes it into a Config object
 func LoadConfig(configFile *os.File) (*Config, error) {
 	dec := yaml.NewDecoder(configFile)
-	dec.SetStrict(true)
 	var config Config
 	err := dec.Decode(&config)
 	if err != nil {

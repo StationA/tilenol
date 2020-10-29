@@ -2,7 +2,8 @@ VERSION := `git describe --tags 2>/dev/null || echo "untagged"`
 COMMITISH := `git describe --always 2>/dev/null`
 
 deps:
-	dep ensure
+	go mod tidy
+	go mod verify
 
 format:
 	go fmt ./...

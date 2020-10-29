@@ -4,8 +4,6 @@ RUN apk update && apk add build-base
 
 ADD . /go/src/github.com/stationa/tilenol
 WORKDIR /go/src/github.com/stationa/tilenol
-RUN wget https://github.com/golang/dep/releases/download/v0.5.1/dep-linux-amd64 -O $GOPATH/bin/dep
-RUN chmod +x $GOPATH/bin/dep
 RUN make release
 
 FROM alpine:3.7
