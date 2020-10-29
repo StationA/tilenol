@@ -122,7 +122,7 @@ func (s *Server) setupRoutes() (*chi.Mux, *chi.Mux) {
 		cors := cors.New(cors.Options{
 			AllowedOrigins:   []string{"*"},
 			AllowedMethods:   []string{"GET", "OPTIONS"},
-			AllowedHeaders:   []string{"Accept", "Accept-Encoding", "Authorization"},
+			AllowedHeaders:   []string{"Accept", "Accept-Encoding", "Authorization", "Cache-Control"},
 			AllowCredentials: true,
 		})
 		r.Use(cors.Handler)
