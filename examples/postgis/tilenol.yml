@@ -13,6 +13,14 @@ layers:
         dsn: host=localhost port=5432 dbname=postgres user=postgres sslmode=disable
         schema: tilenol
         table: buildings
+        # Alternatively, you could use "tableExpression" to define a more complicated source
+        # data query:
+        #
+        # tableExpression: >
+        #   SELECT
+        #     *
+        #   FROM
+        #     tilenol.buildings
         geometryField: geometry
         sourceFields:
           id: id
