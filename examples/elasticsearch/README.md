@@ -1,22 +1,29 @@
-# Tilenol example
+# Elasticsearch example
 
-This directory contains a basic setup for trying out Tilenol locally using a simple Mapbox GL JS
-integration on a webpage.
+This example configures tilenol to use an Elasticsearch backend to service tile requests for our map.
 
-## Without installing Tilenol
+## Setup
 
-1. Run `docker-compose up` to bring up both a local Tilenol and ElasticSearch instance, waiting until
-   Tilenol shows that it is up and serving before continuing
-2. Run the `create_index.sh` script to create a new ElasticSearch index (`buildings`) with some data
-   pre-populated
-3. Replace the string `<YOUR_MAPBOX_ACCESS_TOKEN>` in the `index.html` file
-4. Open `index.html` in your browser of choice to view the vector building shapes
+### Start a local Elasticsearch cluster
 
-## With Tilenol already installed
+To start a locally-running PostGIS database, you can run the official Docker image:
 
-1. Run `docker-compose up es` to bring up only a local ElasticSearch instance
-2. Run `tilenol run -x` to start a local Tilenol server (note the `-x` to enable broad CORS support)
-3. Run the `create_index.sh` script to create a new ElasticSearch index (`buildings`) with some data
-   pre-populated
-4. Replace the string `<YOUR_MAPBOX_ACCESS_TOKEN>` in the `index.html` file
-5. Open `index.html` in your browser of choice to view the vector building shapes
+```shell
+docker run -it -p 9200:9200 -p 9300:9300 -e discovery.type=single-node docker.elastic.co/elasticsearch/elasticsearch:6.5.1
+```
+
+### Load sample data into your cluster
+
+Once your search cluster is up and running, you can load some sample data for testing:
+
+```shell
+./create_index.sh
+```
+
+### Start tilenol
+
+Lastly, start tilenol:
+
+```shell
+tilenol run -x
+```

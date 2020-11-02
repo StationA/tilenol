@@ -10,7 +10,7 @@ layers:
     minzoom: 14
     source:
       elasticsearch:
-        host: es
+        host: localhost
         port: 9200
         index: buildings
         geometryField: geometry
