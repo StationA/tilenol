@@ -20,7 +20,7 @@ func RowsToMaps(rows *sql.Rows) ([]map[string]interface{}, error) {
 	for rows.Next() {
 		row := make([]interface{}, len(cols))
 		for idx := range cols {
-			row[idx] = new(MetalScanner)
+			row[idx] = new(RowScanner)
 		}
 		err := rows.Scan(row...)
 		if err != nil {
@@ -28,9 +28,9 @@ func RowsToMaps(rows *sql.Rows) ([]map[string]interface{}, error) {
 		}
 		m := make(map[string]interface{})
 		for idx, col := range cols {
-			var scanner = row[idx].(*MetalScanner)
-			if scanner.valid {
-				m[col] = scanner.value
+			var s = row[idx].(*RowScanner)
+			if s.valid {
+				m[col] = s.value
 			}
 		}
 		maps = append(maps, m)
@@ -39,19 +39,19 @@ func RowsToMaps(rows *sql.Rows) ([]map[string]interface{}, error) {
 	return maps, nil
 }
 
-type MetalScanner struct {
+type RowScanner struct {
 	valid bool
 	value interface{}
 }
 
-func (scanner *MetalScanner) getBytes(src interface{}) []byte {
+func (s *RowScanner) getBytes(src interface{}) []byte {
 	if a, ok := src.([]uint8); ok {
 		return a
 	}
 	return nil
 }
 
-func (scanner *MetalScanner) tryDecodeGeo(data []byte) (orb.Geometry, error) {
+func (s *RowScanner) tryDecodeGeo(data []byte) (orb.Geometry, error) {
 	dec := wkb.NewDecoder(bytes.NewBuffer(data))
 	geom, err := dec.Decode()
 	if err != nil {
@@ -60,44 +60,44 @@ func (scanner *MetalScanner) tryDecodeGeo(data []byte) (orb.Geometry, error) {
 	return geom, nil
 }
 
-func (scanner *MetalScanner) Scan(src interface{}) error {
+func (s *RowScanner) Scan(src interface{}) error {
 	switch src.(type) {
 	case int64:
 		if value, ok := src.(int64); ok {
-			scanner.value = value
-			scanner.valid = true
+			s.value = value
+			s.valid = true
 		}
 	case float64:
 		if value, ok := src.(float64); ok {
-			scanner.value = value
-			scanner.valid = true
+			s.value = value
+			s.valid = true
 		}
 	case bool:
 		if value, ok := src.(bool); ok {
-			scanner.value = value
-			scanner.valid = true
+			s.value = value
+			s.valid = true
 		}
 	case string:
-		scanner.value = src
-		scanner.valid = true
+		s.value = src
+		s.valid = true
 	case []byte:
-		geom, err := scanner.tryDecodeGeo(src.([]byte))
+		geom, err := s.tryDecodeGeo(src.([]byte))
 		if err != nil {
-			value := scanner.getBytes(src)
-			scanner.value = value
-			scanner.valid = true
+			value := s.getBytes(src)
+			s.value = value
+			s.valid = true
 		} else {
-			scanner.value = geom
-			scanner.valid = true
+			s.value = geom
+			s.valid = true
 		}
 	case time.Time:
 		if value, ok := src.(time.Time); ok {
-			scanner.value = value
-			scanner.valid = true
+			s.value = value
+			s.valid = true
 		}
 	case nil:
-		scanner.value = nil
-		scanner.valid = true
+		s.value = nil
+		s.valid = true
 	}
 	return nil
 }
