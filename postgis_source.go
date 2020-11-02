@@ -61,6 +61,25 @@ func NewPostGISSource(config *PostGISConfig) (Source, error) {
 	}, nil
 }
 
+// Create a new PostGISSource from the input object, but add extra SourceFields
+// to include to the new PostGISSource instance.
+func (p *PostGISSource) withExtraFields(extraFields map[string]string) *PostGISSource {
+	sourceFields := make(map[string]string)
+	for k, v := range p.SourceFields {
+		sourceFields[k] = v
+	}
+	for k, v := range extraFields {
+		sourceFields[k] = v
+	}
+	return &PostGISSource{
+		DB:            p.DB,
+		Schema:        p.Schema,
+		Table:         p.Table,
+		GeometryField: p.GeometryField,
+		SourceFields:  sourceFields,
+	}
+}
+
 func (p *PostGISSource) buildSQL(bounds orb.Bound) (string, error) {
 	envelope := goqu.Func("ST_MakeEnvelope",
 		bounds.Min.X(),
@@ -92,6 +111,18 @@ func (p *PostGISSource) buildSQL(bounds orb.Bound) (string, error) {
 // GetFeatures implements the Source interface, to get feature data from an
 // PostGIS server
 func (p *PostGISSource) GetFeatures(ctx context.Context, req *TileRequest) (*geojson.FeatureCollection, error) {
+	// Check for extra fields specifications. They must have the form of <property_name>:<SQL column expression>,
+	// eg: height_times_two:height*2.
+	if inc_args, exists := req.Args["s"]; exists {
+		extraFields, err := makeFieldMap(inc_args)
+		if err != nil {
+			return nil, err
+		}
+		// Instead of the original PostGISSource use one that is augmented with the extra
+		// source field requests for the remainder of this request.
+		p = p.withExtraFields(extraFields)
+	}
+
 	sql, err := p.buildSQL(req.MapTile().Bound())
 	if err != nil {
 		return nil, err
