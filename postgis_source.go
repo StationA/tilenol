@@ -15,7 +15,6 @@ import (
 	// Geo deps
 	"github.com/paulmach/orb"
 	"github.com/paulmach/orb/geojson"
-	// "github.com/paulmach/orb/maptile"
 )
 
 const (
