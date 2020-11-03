@@ -134,7 +134,7 @@ func NewPostGISSource(config *PostGISConfig) (Source, error) {
 	}, nil
 }
 
-// Creates a new PostGISSource from the input object, but add extra SourceFields
+// Creates a new PostGISSource from the input object, but adds extra SourceFields
 // to include to the new PostGISSource instance.
 func (p *PostGISSource) withExtraFields(extraFields map[string]string) *PostGISSource {
 	sourceFields := make(map[string]string)
@@ -210,7 +210,7 @@ func (p *PostGISSource) runQuery(ctx context.Context, q string) ([]map[string]in
 	defer rows.Close()
 
 	// Re-map the row objects to a list of map-like records
-	records, err := RowsToMaps(rows)
+	records, err := RowsToMaps(rows, p.GeometryField)
 	if err != nil {
 		return nil, err
 	}

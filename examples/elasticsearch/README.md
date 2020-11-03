@@ -6,7 +6,7 @@ This example configures tilenol to use an Elasticsearch backend to service tile 
 
 ### Start a local Elasticsearch cluster
 
-To start a locally-running PostGIS database, you can run the official Docker image:
+To start a locally-running Elasticsearch cluster, you can run the official Docker image:
 
 ```shell
 docker run -it -p 9200:9200 -p 9300:9300 -e discovery.type=single-node docker.elastic.co/elasticsearch/elasticsearch:6.5.1

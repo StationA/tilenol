@@ -2,9 +2,15 @@ package tilenol
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/paulmach/orb/geojson"
+)
+
+var (
+	MultipleSourcesErr = errors.New("Layers can only support a single backend source")
+	NoSourcesErr       = errors.New("Layers must have a single backend source configured")
 )
 
 // SourceConfig represents a generic YAML source configuration object
@@ -53,6 +59,12 @@ func CreateLayer(layerConfig LayerConfig) (*Layer, error) {
 		Maxzoom:     layerConfig.Maxzoom,
 	}
 	// TODO: How can we make this more generic?
+	if layerConfig.Source.Elasticsearch != nil && layerConfig.Source.PostGIS != nil {
+		return nil, MultipleSourcesErr
+	}
+	if layerConfig.Source.Elasticsearch == nil && layerConfig.Source.PostGIS == nil {
+		return nil, NoSourcesErr
+	}
 	if layerConfig.Source.Elasticsearch != nil {
 		source, err := NewElasticsearchSource(layerConfig.Source.Elasticsearch)
 		if err != nil {
