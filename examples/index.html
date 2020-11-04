@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Render Tilenol data on a map</title>
+    <meta
+      name="viewport"
+      content="initial-scale=1,maximum-scale=1,user-scalable=no"
+    />
+    <script src="https://api.tiles.mapbox.com/mapbox-gl-js/v0.53.1/mapbox-gl.js"></script>
+    <link
+      href="https://api.tiles.mapbox.com/mapbox-gl-js/v0.53.1/mapbox-gl.css"
+      rel="stylesheet"
+    />
+    <style>
+      body {
+        margin: 0;
+        padding: 0;
+      }
+      #map {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        width: 100%;
+      }
+      .props {
+        min-width: 240px;
+      }
+      .props tr td:first-child {
+        font-weight: bold;
+        text-transform: uppercase;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="map"></div>
+    <script>
+      // Set your Mapbox access token in the URL query string
+      mapboxgl.accessToken = window.location.search.substring(1);
+      var map = new mapboxgl.Map({
+        style: "mapbox://styles/mapbox/dark-v9",
+        center: [-71.06107, 42.36144],
+        zoom: 15,
+        pitch: 45,
+        container: "map",
+        transformRequest: function (url, resourceType) {
+          if (resourceType === "Tile" && url.indexOf("http://localhost") > -1) {
+            return {
+              url: url,
+              headers: {
+                "Cache-Control": "no-cache",
+              },
+            };
+          }
+        },
+      });
+
+      map.on("load", function () {
+        map.addLayer({
+          id: "tilenol",
+          type: "fill-extrusion",
+          source: {
+            type: "vector",
+            tiles: ["http://localhost:3000/buildings/{z}/{x}/{y}.mvt"],
+          },
+          "source-layer": "buildings",
+          paint: {
+            "fill-extrusion-color": "#44d0c0",
+            "fill-extrusion-height": ["get", "height"],
+            "fill-extrusion-opacity": 1,
+          },
+        });
+
+        map.on("click", "tilenol", function (e) {
+          var attrs = Object.entries(e.features[0].properties).map(function (
+            entry
+          ) {
+            var k = entry[0];
+            var v = entry[1];
+            return "<tr><td>" + k + "</td><td>" + v + "</td></tr>";
+          });
+          var popupHTML = "<table class='props'>" + attrs.join("") + "</table>";
+          new mapboxgl.Popup()
+            .setLngLat(e.lngLat)
+            .setHTML(popupHTML)
+            .addTo(map);
+        });
+      });
+    </script>
+  </body>
+</html>

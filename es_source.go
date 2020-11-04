@@ -87,7 +87,7 @@ func NewElasticsearchSource(config *ElasticsearchConfig) (Source, error) {
 	}, nil
 }
 
-// Create a new ElasticsearchSource from the input object, but add extra SourceFields
+// Create a new ElasticsearchSource from the input object, but adds extra SourceFields
 // to include to the new ElasticsearchSource instance.
 func (e *ElasticsearchSource) withExtraFields(extraFields map[string]string) *ElasticsearchSource {
 	sourceFields := make(map[string]string)

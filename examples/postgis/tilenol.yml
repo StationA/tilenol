@@ -1,0 +1,29 @@
+# Cache configuration (optional)
+# cache:
+#   redis:
+#     host: localhost
+#     port: 6379
+#     ttl: 24h
+# Layer configuration
+layers:
+  - name: buildings
+    minzoom: 14
+    source:
+      postgis:
+        dsn: host=localhost port=5432 dbname=postgres user=postgres sslmode=disable
+        schema: tilenol
+        table: buildings
+        # Alternatively, you could use "tableExpression" to define a more complicated source
+        # data query:
+        #
+        # tableExpression: >
+        #   SELECT
+        #     *
+        #   FROM
+        #     tilenol.buildings
+        geometryField: geometry
+        sourceFields:
+          id: id
+          name: name
+          height: height
+          area_sqft: (ST_Area(geometry::geography) / POWER(0.3048,2))::INTEGER
