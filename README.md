@@ -1,8 +1,7 @@
-tilenol [![GoDoc](https://godoc.org/github.com/StationA/tilenol?status.svg)](https://godoc.org/github.com/StationA/tilenol) [![Go Report Card](https://goreportcard.com/badge/github.com/stationa/tilenol)](https://goreportcard.com/report/github.com/stationa/tilenol) [![Build Status](https://api.travis-ci.com/StationA/tilenol.svg?branch=master)](https://travis-ci.com/StationA/tilenol)
-=========
+# tilenol [![GoDoc](https://godoc.org/github.com/StationA/tilenol?status.svg)](https://godoc.org/github.com/StationA/tilenol) [![Go Report Card](https://goreportcard.com/badge/github.com/stationa/tilenol)](https://goreportcard.com/report/github.com/stationa/tilenol) [![Build Status](https://api.travis-ci.com/StationA/tilenol.svg?branch=master)](https://travis-ci.com/StationA/tilenol)
 
-Tilenol is a scalable web server for serving geospatial data stored in an ElasticSearch cluster as
-Mapbox Vector Tiles.
+Tilenol is a scalable web server for serving geospatial data stored in
+[multiple supported backends](#supported-backends) as Mapbox Vector Tiles.
 
 ## Installation
 
@@ -74,6 +73,13 @@ layers:
           area_sqft: building.area_sqft
           height_ft: building.height_ft
 ```
+
+### Supported backends
+
+Currently, tilenol supports the following data backends:
+
+- [Elasticsearch](examples/elasticsearch/)
+- [PostGIS](examples/postgis/)
 
 ## Contributing
 
