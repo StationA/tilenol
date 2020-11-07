@@ -1,0 +1,31 @@
+version: '3.1'
+services:
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:6.5.1
+    container_name: elasticsearch
+    restart: always
+    ports:
+      - 9200:9200
+      - 9300:9300
+    environment:
+      - discovery.type=single-node
+  tilenol:
+    depends_on:
+      - elasticsearch
+    image: stationa/tilenol
+    container_name: tilenol
+    build: 
+      context: ../../
+      dockerfile: ./Dockerfile
+    ports:
+      - 3000:3000
+    volumes: 
+      - "${PWD}/tilenol.yml:/opt/tilenol.yml"
+    # There is a brief period after the elasticsearch container has started but before it has started serving
+    #  If tilenol starts during this time, it will fail due to the race condition
+    #  This could be resolved with a health check, but that would bloat the image
+    #  Sleep for 5 seconds to allow elasticsearch to come up before starting tilenol
+    entrypoint: []
+    command: >
+      sh -c "sleep 5 && 
+      /usr/bin/tilenol run -x --config-file=/opt/tilenol.yml"

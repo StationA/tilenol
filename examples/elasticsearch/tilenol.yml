@@ -10,10 +10,10 @@ layers:
     minzoom: 14
     source:
       elasticsearch:
-        host: localhost
+        host: elasticsearch
         port: 9200
         index: buildings
         geometryField: geometry
         sourceFields:
           area_sqft: building.area_sqft
-          height_ft: building.height_ft
+          height: height

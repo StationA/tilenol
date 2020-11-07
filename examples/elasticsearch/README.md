@@ -27,3 +27,18 @@ Lastly, start tilenol:
 ```shell
 tilenol run -x
 ```
+
+## Alternative Dev Environment Setup with `docker-compose`
+
+To start elasticsearch and tilenol together via docker-compose:
+
+```shell
+#build tilenol image
+docker-compose build
+#start up elasticsearch and tilenol containers 
+docker-compose up
+#load sample data
+./create_index.sh
+```
+
+This could be extended to include the redis cache.
