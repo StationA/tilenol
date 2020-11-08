@@ -38,3 +38,27 @@ func TestLayerHashesDifferent(t *testing.T) {
 
 	assert.NotEqual(t, layer.Hash(), layer2.Hash(), "Excepted different layers to have a different hash")
 }
+
+func TestCreateLayerMinZoomOutOfBounds(t *testing.T) {
+	config := LayerConfig{
+		Minzoom: MinZoom - 1,
+		Maxzoom: MaxZoom - 1,
+		Source: SourceConfig{
+			Elasticsearch: new(ElasticsearchConfig),
+		},
+	}
+	_, err := CreateLayer(config)
+	assert.Equal(t, LayerMinZoomOutOfBoundsErr, err, "Expected to fail because layer min zoom is less than absolute allowed min")
+}
+
+func TestCreateLayerMaxZoomOutOfBounds(t *testing.T) {
+	config := LayerConfig{
+		Minzoom: MinZoom + 1,
+		Maxzoom: MaxZoom + 1,
+		Source: SourceConfig{
+			Elasticsearch: new(ElasticsearchConfig),
+		},
+	}
+	_, err := CreateLayer(config)
+	assert.Equal(t, LayerMaxZoomOutOfBoundsErr, err, "Expected to fail because layer max zoom is greater than absolute allowed max")
+}
