@@ -20,9 +20,13 @@ import (
 )
 
 const (
-	// MinZoom is the default minimum zoom for a layer
+	// MinZoom is the absolute minimum zoom for a layer
+	//  tile requests with z-values lower than this will be rejected
+	//  layer configurations with Minzoom values lower than this will be rejected
 	MinZoom = 0
-	// MaxZoom is the default maximum zoom for a layer
+	// MaxZoom is the absolute maximum zoom for a layer
+	//  tile requests with z-values higher than this will be rejected
+	//  layer configurations with Maxzoom values lower than this will be rejected
 	MaxZoom = 22
 	// MinSimplify is the minimum simplification radius
 	MinSimplify = 1.0

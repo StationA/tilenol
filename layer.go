@@ -9,8 +9,10 @@ import (
 )
 
 var (
-	MultipleSourcesErr = errors.New("Layers can only support a single backend source")
-	NoSourcesErr       = errors.New("Layers must have a single backend source configured")
+	MultipleSourcesErr         = errors.New("Layers can only support a single backend source")
+	NoSourcesErr               = errors.New("Layers must have a single backend source configured")
+	LayerMinZoomOutOfBoundsErr = errors.New("Layer Min zoom is below absolute min zoom")
+	LayerMaxZoomOutOfBoundsErr = errors.New("Layer Max Zoom is above absolute max zoom")
 )
 
 // SourceConfig represents a generic YAML source configuration object
@@ -64,6 +66,12 @@ func CreateLayer(layerConfig LayerConfig) (*Layer, error) {
 	}
 	if layerConfig.Source.Elasticsearch == nil && layerConfig.Source.PostGIS == nil {
 		return nil, NoSourcesErr
+	}
+	if layerConfig.Minzoom < MinZoom {
+		return nil, LayerMinZoomOutOfBoundsErr
+	}
+	if layerConfig.Maxzoom > MaxZoom {
+		return nil, LayerMaxZoomOutOfBoundsErr
 	}
 	if layerConfig.Source.Elasticsearch != nil {
 		source, err := NewElasticsearchSource(layerConfig.Source.Elasticsearch)
