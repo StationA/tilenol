@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -38,6 +39,20 @@ type TileRequest struct {
 	Y    int
 	Z    int
 	Args map[string][]string
+}
+
+func (r *TileRequest) String() string {
+	var s = fmt.Sprintf("%d/%d/%d", r.Z, r.X, r.Y)
+	if len(r.Args) > 0 {
+		var q url.Values
+		for k, vs := range r.Args {
+			for _, v := range vs {
+				q.Add(k, v)
+			}
+		}
+		s = fmt.Sprintf("%s?%s", s, q.Encode())
+	}
+	return s
 }
 
 // Error type for HTTP Status code 400
@@ -129,7 +144,7 @@ func (s *Server) setupRoutes() (*chi.Mux, *chi.Mux) {
 	}
 
 	//-- ROUTES
-	r.Get("/{layers}/{z}/{x}/{y}.mvt", s.cached(s.getVectorTile))
+	r.Get("/{layers}/{z}/{x}/{y}.mvt", s.handlerWrapper(s.getVectorTile))
 
 	// TODO: Add GeoJSON endpoint?
 
@@ -171,52 +186,6 @@ func calculateSimplificationThreshold(minZoom, maxZoom, currentZoom int) float64
 	return p*float64(currentZoom-minZoom) + MaxSimplify
 }
 
-// cached is a wrapper function that optionally tries to cache outgoing responses from
-// a Handler
-func (s *Server) cached(handler Handler) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		ctx := r.Context()
-		defer func() {
-			if ctx.Err() == context.Canceled {
-				Logger.Debugf("Request canceled by client")
-				w.WriteHeader(499)
-				return
-			}
-		}()
-
-		var buffer bytes.Buffer
-		key := r.URL.RequestURI()
-		if s.Cache.Exists(key) {
-			Logger.Debugf("Key [%s] found in cache", key)
-			val, err := s.Cache.Get(key)
-			if err != nil {
-				s.handleError(err.(error), w, r)
-				return
-			}
-			buffer.Write(val)
-		} else {
-			Logger.Debugf("Key [%s] is not cached", key)
-			herr := handler(ctx, &buffer, r)
-			if herr != nil {
-				s.handleError(herr.(error), w, r)
-				return
-			}
-			err := s.Cache.Put(key, buffer.Bytes())
-			if err != nil {
-				// Log an error in case the key can't be stored in cache, but continue
-				Logger.Warnf("Could not store key [%s] in cache: %v", key, err)
-			}
-		}
-		// Set standard response headers
-		// TODO: Use the cache TTL to determine the Cache-Control
-		w.Header().Set("Cache-Control", "max-age=86400")
-		w.Header().Set("Content-Encoding", "gzip")
-		// TODO: Store the content type somehow in the cache?
-		w.Header().Set("Content-Type", "application/x-protobuf")
-		io.Copy(w, &buffer)
-	}
-}
-
 // filterLayersByNames filters the tile server layers by the names of layers being
 // requested
 func filterLayersByNames(inLayers []Layer, names []string) []Layer {
@@ -240,6 +209,33 @@ func filterLayersByZoom(inLayers []Layer, z int) []Layer {
 		}
 	}
 	return outLayers
+}
+
+func (s *Server) handlerWrapper(handler Handler) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		defer func() {
+			if ctx.Err() == context.Canceled {
+				Logger.Debugf("Request canceled by client")
+				w.WriteHeader(499)
+				return
+			}
+		}()
+
+		var buffer bytes.Buffer
+		if err := handler(ctx, &buffer, r); err != nil {
+			s.handleError(err, w, r)
+			return
+		}
+
+		// Set standard response headers
+		// TODO: Figure out a smarter cacheing mechanism (see StationA/tilenol#30)
+		w.Header().Set("Cache-Control", "max-age=86400")
+		w.Header().Set("Content-Encoding", "gzip")
+		// TODO: Store the content type somehow in the cache?
+		w.Header().Set("Content-Type", "application/x-protobuf")
+		io.Copy(w, &buffer)
+	}
 }
 
 // getVectorTile computes a vector tile response for the incoming request
@@ -267,6 +263,27 @@ func (s *Server) getVectorTile(rctx context.Context, w io.Writer, r *http.Reques
 		i, layer := i, layer // Fun stuff: https://blog.cloudflare.com/a-go-gotcha-when-closures-and-goroutines-collide/
 		eg.Go(func() error {
 			Logger.Debugf("Retrieving vector tile for layer [%s] @ (%d, %d, %d)", layer.Name, x, y, z)
+
+			cacheKey := fmt.Sprintf("%s/%s", layer, req)
+			if s.Cache.Exists(cacheKey) {
+				Logger.Debugf("Key [%s] found in cache", cacheKey)
+				raw, err := s.Cache.Get(cacheKey)
+				if err != nil {
+					Logger.Warningf("Failed to retrieve layer data from cache [%s]: %s", cacheKey, err)
+					goto CacheFailure
+				}
+				layers, err := mvt.UnmarshalGzipped(raw)
+				if err != nil {
+					Logger.Warningf("Failed to decode layer data in cache [%s]: %s", cacheKey, err)
+					goto CacheFailure
+				}
+				// Note that only one layer should be stored in cache per key
+				fcLayers[i] = layers[0]
+				return nil
+			}
+
+		CacheFailure:
+			Logger.Debugf("Key [%s] is not cached", cacheKey)
 			fc, err := layer.Source.GetFeatures(ctx, req)
 			if err != nil {
 				return err
@@ -284,6 +301,15 @@ func (s *Server) getVectorTile(rctx context.Context, w io.Writer, r *http.Reques
 				fcLayer.Simplify(simplify.DouglasPeucker(simplifyThreshold))
 				fcLayer.RemoveEmpty(1.0, 1.0)
 			}
+
+			raw, err := mvt.MarshalGzipped(mvt.Layers{fcLayer})
+			if err != nil {
+				return err
+			}
+			if err := s.Cache.Put(cacheKey, raw); err != nil {
+				Logger.Warningf("Failed to store layer data in cache [%s]: %s", cacheKey, err)
+			}
+
 			fcLayers[i] = fcLayer
 			return nil
 		})

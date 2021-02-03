@@ -1,7 +1,10 @@
 package tilenol
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/gob"
 	"errors"
 	"fmt"
 
@@ -82,4 +85,18 @@ func CreateLayer(layerConfig LayerConfig) (*Layer, error) {
 		return layer, nil
 	}
 	return nil, fmt.Errorf("Invalid layer source config for layer: %s", layerConfig.Name)
+}
+
+func (l Layer) Hash() string {
+	var buf bytes.Buffer
+	enc := gob.NewEncoder(&buf)
+	enc.Encode(l)
+	hash := sha256.New()
+	hash.Write(buf.Bytes())
+	hashBytes := hash.Sum(nil)
+	return fmt.Sprintf("%x", hashBytes)
+}
+
+func (l Layer) String() string {
+	return fmt.Sprintf("%s@%s", l.Name, l.Hash())
 }
