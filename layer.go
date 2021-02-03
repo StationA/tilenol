@@ -34,6 +34,8 @@ type LayerConfig struct {
 	Minzoom int `yaml:"minzoom"`
 	// Maxzoom specifies the maximum z value for the layer
 	Maxzoom int `yaml:"maxzoom"`
+	// NoCache indicates that this layer should not cache its source data
+	NoCache bool `yaml:"nocache"`
 	// Source configures the underlying Source for the layer
 	Source SourceConfig `yaml:"source"`
 }
@@ -50,6 +52,7 @@ type Layer struct {
 	Description string
 	Minzoom     int
 	Maxzoom     int
+	Cacheable   bool
 	Source      Source
 }
 
@@ -60,6 +63,7 @@ func CreateLayer(layerConfig LayerConfig) (*Layer, error) {
 		Description: layerConfig.Description,
 		Minzoom:     layerConfig.Minzoom,
 		Maxzoom:     layerConfig.Maxzoom,
+		Cacheable:   !layerConfig.NoCache,
 	}
 	// TODO: How can we make this more generic?
 	if layerConfig.Source.Elasticsearch != nil && layerConfig.Source.PostGIS != nil {

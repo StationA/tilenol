@@ -265,7 +265,7 @@ func (s *Server) getVectorTile(rctx context.Context, w io.Writer, r *http.Reques
 			Logger.Debugf("Retrieving vector tile for layer [%s] @ (%d, %d, %d)", layer.Name, x, y, z)
 
 			cacheKey := fmt.Sprintf("%s/%s", layer, req)
-			if s.Cache.Exists(cacheKey) {
+			if layer.Cacheable && s.Cache.Exists(cacheKey) {
 				Logger.Debugf("Key [%s] found in cache", cacheKey)
 				raw, err := s.Cache.Get(cacheKey)
 				if err != nil {
