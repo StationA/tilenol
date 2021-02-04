@@ -43,7 +43,7 @@ type TileRequest struct {
 func (r *TileRequest) String() string {
 	var s = fmt.Sprintf("%d/%d/%d", r.Z, r.X, r.Y)
 	if len(r.Args) > 0 {
-		var q url.Values
+		q := make(url.Values)
 		for k, vs := range r.Args {
 			for _, v := range vs {
 				q.Add(k, v)
@@ -243,7 +243,7 @@ func (s *Server) getLayerDataFromCache(ctx context.Context, cacheKey string) (*m
 
 // getLayerData retrieves layer data either from cache or the original source
 func (s *Server) getLayerData(ctx context.Context, layer Layer, req *TileRequest) (*mvt.Layer, error) {
-	cacheKey := fmt.Sprintf("%s/%s", layer, req)
+	cacheKey := fmt.Sprintf("%s/%s", layer.String(), req.String())
 	if layer.Cacheable && s.Cache.Exists(cacheKey) {
 		Logger.Debugf("Key [%s] found in cache", cacheKey)
 		if fcLayer, err := s.getLayerDataFromCache(ctx, cacheKey); err == nil {
