@@ -3,11 +3,12 @@ package tilenol
 import (
 	"bytes"
 	"context"
-	"io"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/paulmach/orb/geojson"
 )
 
 func TestFilterLayersByName(t *testing.T) {
@@ -62,49 +63,113 @@ func TestCalculateSimplificationThreshold(t *testing.T) {
 	}
 }
 
+type countingSource struct {
+	Source     Source
+	GetCounter int
+}
+
+func (c *countingSource) GetFeatures(ctx context.Context, req *TileRequest) (*geojson.FeatureCollection, error) {
+	c.GetCounter++
+	return c.Source.GetFeatures(ctx, req)
+}
+
+type countingCache struct {
+	Cache      Cache
+	GetCounter int
+	PutCounter int
+}
+
+func (c *countingCache) Exists(key string) bool {
+	return c.Cache.Exists(key)
+}
+
+func (c *countingCache) Get(key string) ([]byte, error) {
+	c.GetCounter++
+	return c.Cache.Get(key)
+}
+
+func (c *countingCache) Put(key string, val []byte) error {
+	c.PutCounter++
+	return c.Cache.Put(key, val)
+}
+
 func TestCachedHandler(t *testing.T) {
-	server := &Server{Cache: NewInMemoryCache()}
-	var requests []interface{}
-	handler := func(context.Context, io.Writer, *http.Request) error {
-		requests = append(requests, nil)
-		return nil
+	source := &countingSource{Source: &NilSource{}}
+	cache := &countingCache{Cache: NewInMemoryCache()}
+	layers := []Layer{
+		Layer{Cacheable: true, Source: source},
 	}
-	cachedHandler := server.cached(handler)
+	server := &Server{Layers: layers, Cache: cache}
+	handler := http.HandlerFunc(server.getVectorTile)
+
 	for i := 0; i < 100; i++ {
 		body := ioutil.NopCloser(bytes.NewReader([]byte{}))
 		r := httptest.NewRequest("GET", "/_all/0/0/0.mvt", body)
 		w := httptest.NewRecorder()
-		cachedHandler.ServeHTTP(w, r)
+		handler.ServeHTTP(w, r)
 		res := w.Result()
 		if res.StatusCode != 200 {
 			t.Error("Unsuccessful status code")
 		}
 	}
-	if len(requests) != 1 {
-		t.Error("Request not cached")
+
+	if !(source.GetCounter == 1 && cache.GetCounter == 99 && cache.PutCounter == 1) {
+		t.Errorf("Request not cached: %d  %d", source.GetCounter, cache.PutCounter)
 	}
 }
 
 func TestUnCachedHandler(t *testing.T) {
-	server := &Server{Cache: &NilCache{}}
-	var requests []interface{}
-	handler := func(context.Context, io.Writer, *http.Request) error {
-		requests = append(requests, nil)
-		return nil
+	source := &countingSource{Source: &NilSource{}}
+	cache := &countingCache{Cache: &NilCache{}}
+	layers := []Layer{
+		Layer{Cacheable: true, Source: source},
 	}
-	cachedHandler := server.cached(handler)
+	server := &Server{Layers: layers, Cache: cache}
+	handler := http.HandlerFunc(server.getVectorTile)
+
 	for i := 0; i < 100; i++ {
 		body := ioutil.NopCloser(bytes.NewReader([]byte{}))
 		r := httptest.NewRequest("GET", "/_all/0/0/0.mvt", body)
 		w := httptest.NewRecorder()
-		cachedHandler.ServeHTTP(w, r)
+		handler.ServeHTTP(w, r)
 		res := w.Result()
 		if res.StatusCode != 200 {
 			t.Error("Unsuccessful status code")
 		}
 	}
-	if len(requests) != 100 {
+
+	if !(source.GetCounter == 100 && cache.GetCounter == 0 && cache.PutCounter == 100) {
 		t.Error("Requests should not be cached")
+	}
+}
+
+func TestLayerCacheability(t *testing.T) {
+	source := &countingSource{Source: &NilSource{}}
+	cachedSource := &countingSource{Source: &NilSource{}}
+	cache := &countingCache{Cache: NewInMemoryCache()}
+	layers := []Layer{
+		Layer{Cacheable: true, Source: cachedSource},
+		Layer{Cacheable: false, Source: source},
+	}
+	server := &Server{Layers: layers, Cache: cache}
+	handler := http.HandlerFunc(server.getVectorTile)
+
+	for i := 0; i < 100; i++ {
+		body := ioutil.NopCloser(bytes.NewReader([]byte{}))
+		r := httptest.NewRequest("GET", "/_all/0/0/0.mvt", body)
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, r)
+		res := w.Result()
+		if res.StatusCode != 200 {
+			t.Error("Unsuccessful status code")
+		}
+	}
+
+	if !(source.GetCounter == 100) {
+		t.Errorf("Requests should not be cached for the not-cacheable layer: %d", source.GetCounter)
+	}
+	if !(cachedSource.GetCounter == 1) {
+		t.Errorf("Requests should be cached for the cacheable layer: %d", cachedSource.GetCounter)
 	}
 }
 
