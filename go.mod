@@ -6,11 +6,14 @@ require (
 	github.com/DATA-DOG/go-sqlmock v1.3.3
 	github.com/alecthomas/template v0.0.0-20190718012654-fb15b899a751 // indirect
 	github.com/alecthomas/units v0.0.0-20190924025748-f65c72e2690d // indirect
+	github.com/dlclark/regexp2 v1.4.0 // indirect
+	github.com/dop251/goja v0.0.0-20210126164150-f5884268f0c0
 	github.com/doug-martin/goqu/v9 v9.10.0
 	github.com/fortytw2/leaktest v1.3.0 // indirect
 	github.com/go-chi/chi v4.1.2+incompatible
 	github.com/go-chi/cors v1.1.1
 	github.com/go-redis/redis v6.15.9+incompatible
+	github.com/go-sourcemap/sourcemap v2.1.3+incompatible // indirect
 	github.com/google/go-cmp v0.5.2 // indirect
 	github.com/kr/pretty v0.1.0 // indirect
 	github.com/lib/pq v1.8.0

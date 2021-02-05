@@ -15,7 +15,6 @@ import (
 	"github.com/go-chi/cors"
 	"github.com/paulmach/orb/encoding/mvt"
 	"github.com/paulmach/orb/maptile"
-	"github.com/paulmach/orb/simplify"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -34,10 +33,10 @@ const (
 
 // TileRequest is an object containing the tile request context
 type TileRequest struct {
-	X    int
-	Y    int
-	Z    int
-	Args map[string][]string
+	X    int                 `json:"x"`
+	Y    int                 `json:"y"`
+	Z    int                 `json:"z"`
+	Args map[string][]string `json:"args"`
 }
 
 func (r *TileRequest) String() string {
@@ -276,6 +275,35 @@ func (s *Server) getLayerData(ctx context.Context, layer Layer, req *TileRequest
 	return fcLayer, nil
 }
 
+func (s *Server) postProcess(scriptSource string, req *TileRequest, fcLayer *mvt.Layer) error {
+	script, err := CompileScript(scriptSource, map[string]interface{}{"request": req})
+	if err != nil {
+		return err
+	}
+
+	for _, feature := range fcLayer.Features {
+		processed, err := script.Apply(feature)
+		if err != nil {
+			Logger.Errorf("Failed to apply post-processing script: %v", err)
+			// TODO: How should we deal with failed features?
+			continue
+		}
+		if processed != nil {
+			feature.Type = processed.Type
+			feature.Geometry = processed.Geometry
+			feature.Properties = make(map[string]interface{})
+			for k, v := range processed.Properties {
+				if v != nil {
+					feature.Properties[k] = v
+				}
+			}
+		} else {
+			// TODO: How to remove a filtered feature?
+		}
+	}
+	return nil
+}
+
 // getVectorTile computes a vector tile response for the incoming request
 func (s *Server) getVectorTile(w http.ResponseWriter, r *http.Request) {
 	rctx := r.Context()
@@ -323,14 +351,11 @@ func (s *Server) getVectorTile(w http.ResponseWriter, r *http.Request) {
 				return err
 			}
 
-			// TODO: Consider the tradeoffs of cacheing pre-simplified vs. post-simplified layers
-			if s.Simplify {
-				minZoom := layer.Minzoom
-				maxZoom := layer.Maxzoom
-				simplifyThreshold := calculateSimplificationThreshold(minZoom, maxZoom, z)
-				Logger.Debugf("Simplifying @ zoom [%d], epsilon [%f]", z, simplifyThreshold)
-				fcLayer.Simplify(simplify.DouglasPeucker(simplifyThreshold))
-				fcLayer.RemoveEmpty(1.0, 1.0)
+			scriptSource := r.URL.Query().Get("script")
+			if scriptSource != "" {
+				if err := s.postProcess(scriptSource, req, fcLayer); err != nil {
+					Logger.Errorf("Failed to post-process: %s", err)
+				}
 			}
 
 			fcLayers[i] = fcLayer
