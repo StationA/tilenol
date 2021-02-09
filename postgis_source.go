@@ -198,8 +198,10 @@ func (p *PostGISSource) runQuery(ctx context.Context, q string) ([]map[string]in
 	// Use a read-only transaction to ensure that we can't execute write operations to the database
 	txOps := &sql.TxOptions{ReadOnly: true}
 	tx, err := p.DB.BeginTx(qCtx, txOps)
-	// "Roll back" the transaction here just to ensure that any writes are not committed
-	defer tx.Rollback()
+	// Note that the database backend will rollback the transaction upon context cancellation.
+	if err != nil {
+		return nil, err
+	}
 
 	// Actually execute the query
 	Logger.Debugf("Executing SQL: %s\n", q)
