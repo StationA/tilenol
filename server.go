@@ -1,12 +1,12 @@
 package tilenol
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -38,6 +38,20 @@ type TileRequest struct {
 	Y    int
 	Z    int
 	Args map[string][]string
+}
+
+func (r *TileRequest) String() string {
+	var s = fmt.Sprintf("%d/%d/%d", r.Z, r.X, r.Y)
+	if len(r.Args) > 0 {
+		q := make(url.Values)
+		for k, vs := range r.Args {
+			for _, v := range vs {
+				q.Add(k, v)
+			}
+		}
+		s = strings.Join([]string{s, q.Encode()}, "?")
+	}
+	return s
 }
 
 // Error type for HTTP Status code 400
@@ -129,9 +143,10 @@ func (s *Server) setupRoutes() (*chi.Mux, *chi.Mux) {
 	}
 
 	//-- ROUTES
-	r.Get("/{layers}/{z}/{x}/{y}.mvt", s.cached(s.getVectorTile))
+	r.Get("/{layers}/{z}/{x}/{y}.mvt", s.getVectorTile)
 
 	// TODO: Add GeoJSON endpoint?
+	// TODO: Add TileJSON endpoint (see StationA/tilenol#36)
 
 	i := chi.NewRouter()
 	i.Get("/healthcheck", s.healthCheck)
@@ -158,7 +173,7 @@ func (s *Server) Start() {
 
 // healthCheck implements a simple healthcheck endpoint for the internal metrics server
 func (s *Server) healthCheck(w http.ResponseWriter, r *http.Request) {
-	// TODO: Maybe in the future check that ES is reachable?
+	// TODO: Maybe in the future check that each layer source is reachable?
 	fmt.Fprintf(w, "OK")
 }
 
@@ -169,52 +184,6 @@ func calculateSimplificationThreshold(minZoom, maxZoom, currentZoom int) float64
 	z := float64(maxZoom - minZoom)
 	p := s / z
 	return p*float64(currentZoom-minZoom) + MaxSimplify
-}
-
-// cached is a wrapper function that optionally tries to cache outgoing responses from
-// a Handler
-func (s *Server) cached(handler Handler) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		ctx := r.Context()
-		defer func() {
-			if ctx.Err() == context.Canceled {
-				Logger.Debugf("Request canceled by client")
-				w.WriteHeader(499)
-				return
-			}
-		}()
-
-		var buffer bytes.Buffer
-		key := r.URL.RequestURI()
-		if s.Cache.Exists(key) {
-			Logger.Debugf("Key [%s] found in cache", key)
-			val, err := s.Cache.Get(key)
-			if err != nil {
-				s.handleError(err.(error), w, r)
-				return
-			}
-			buffer.Write(val)
-		} else {
-			Logger.Debugf("Key [%s] is not cached", key)
-			herr := handler(ctx, &buffer, r)
-			if herr != nil {
-				s.handleError(herr.(error), w, r)
-				return
-			}
-			err := s.Cache.Put(key, buffer.Bytes())
-			if err != nil {
-				// Log an error in case the key can't be stored in cache, but continue
-				Logger.Warnf("Could not store key [%s] in cache: %v", key, err)
-			}
-		}
-		// Set standard response headers
-		// TODO: Use the cache TTL to determine the Cache-Control
-		w.Header().Set("Cache-Control", "max-age=86400")
-		w.Header().Set("Content-Encoding", "gzip")
-		// TODO: Store the content type somehow in the cache?
-		w.Header().Set("Content-Type", "application/x-protobuf")
-		io.Copy(w, &buffer)
-	}
 }
 
 // filterLayersByNames filters the tile server layers by the names of layers being
@@ -242,15 +211,94 @@ func filterLayersByZoom(inLayers []Layer, z int) []Layer {
 	return outLayers
 }
 
+// getLayerDataFromSource retrieves layer data from the original backend source
+func (s *Server) getLayerDataFromSource(ctx context.Context, layer Layer, req *TileRequest) (*mvt.Layer, error) {
+	fc, err := layer.GetFeatures(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+
+	fcLayer := mvt.NewLayer(layer.Name, fc)
+	fcLayer.Version = 2 // Set to tile spec v2
+	fcLayer.ProjectToTile(req.MapTile())
+	fcLayer.Clip(mvt.MapboxGLDefaultExtentBound)
+	return fcLayer, nil
+}
+
+// getLayerDataFromCache retrieves layer data from the configured cache
+func (s *Server) getLayerDataFromCache(ctx context.Context, cacheKey string) (*mvt.Layer, error) {
+	raw, err := s.Cache.Get(cacheKey)
+	if err != nil {
+		return nil, err
+	}
+	layers, err := mvt.UnmarshalGzipped(raw)
+	if err != nil {
+		return nil, err
+	}
+
+	// Note: since we store an mvt.Layers array with only a single layer, we need to pull out
+	// the first layer to match the return interface
+	return layers[0], nil
+}
+
+// getLayerData retrieves layer data either from cache or the original source
+func (s *Server) getLayerData(ctx context.Context, layer Layer, req *TileRequest) (*mvt.Layer, error) {
+	cacheKey := fmt.Sprintf("%s/%s", layer.String(), req.String())
+	if layer.Cacheable && s.Cache.Exists(cacheKey) {
+		Logger.Debugf("Key [%s] found in cache", cacheKey)
+		if fcLayer, err := s.getLayerDataFromCache(ctx, cacheKey); err == nil {
+			return fcLayer, nil
+		} else {
+			Logger.Warningf("Failed to retrieve layer data from cache [%s]: %s", cacheKey, err)
+		}
+	}
+
+	Logger.Debugf("Key [%s] is not cached", cacheKey)
+
+	fcLayer, err := s.getLayerDataFromSource(ctx, layer, req)
+	if err != nil {
+		return nil, err
+	}
+
+	if layer.Cacheable {
+		// Note: paulmach/orb only implements marshalling code for an array of layer objects,
+		// so we need to wrap the computed fcLayer into a single-item array
+		raw, err := mvt.MarshalGzipped(mvt.Layers{fcLayer})
+		if err != nil {
+			return nil, err
+		}
+
+		if err := s.Cache.Put(cacheKey, raw); err != nil {
+			Logger.Warningf("Failed to store layer data in cache [%s]: %s", cacheKey, err)
+		}
+	}
+
+	return fcLayer, nil
+}
+
 // getVectorTile computes a vector tile response for the incoming request
-func (s *Server) getVectorTile(rctx context.Context, w io.Writer, r *http.Request) error {
+func (s *Server) getVectorTile(w http.ResponseWriter, r *http.Request) {
+	rctx := r.Context()
+
+	// Setup deferred error handler for request cancellations
+	defer func() {
+		// TODO: Fix this behavior for certain cancellation scenarios (see StationA/tilenol#42)
+		if rctx.Err() == context.Canceled {
+			Logger.Debugf("Request canceled by client")
+			w.WriteHeader(499)
+			return
+		}
+	}()
+
 	z, _ := strconv.Atoi(chi.URLParam(r, "z"))
 	x, _ := strconv.Atoi(chi.URLParam(r, "x"))
 	y, _ := strconv.Atoi(chi.URLParam(r, "y"))
 	requestedLayers := chi.URLParam(r, "layers")
+
 	req, err := MakeTileRequest(r, x, y, z)
 	if err != nil {
-		return err
+		s.handleError(err, w, r)
+		return
 	}
 
 	var layersToCompute = filterLayersByZoom(s.Layers, z)
@@ -265,17 +313,17 @@ func (s *Server) getVectorTile(rctx context.Context, w io.Writer, r *http.Reques
 	fcLayers := make(mvt.Layers, len(layersToCompute))
 	for i, layer := range layersToCompute {
 		i, layer := i, layer // Fun stuff: https://blog.cloudflare.com/a-go-gotcha-when-closures-and-goroutines-collide/
+
+		// Start a goroutine for each layer
 		eg.Go(func() error {
-			Logger.Debugf("Retrieving vector tile for layer [%s] @ (%d, %d, %d)", layer.Name, x, y, z)
-			fc, err := layer.Source.GetFeatures(ctx, req)
+			Logger.Debugf("Retrieving layer data for [%s] @ (%d, %d, %d)", layer, z, x, y)
+
+			fcLayer, err := s.getLayerData(ctx, layer, req)
 			if err != nil {
 				return err
 			}
-			fcLayer := mvt.NewLayer(layer.Name, fc)
-			fcLayer.Version = 2 // Set to tile spec v2
-			fcLayer.ProjectToTile(req.MapTile())
-			fcLayer.Clip(mvt.MapboxGLDefaultExtentBound)
 
+			// TODO: Consider the tradeoffs of cacheing pre-simplified vs. post-simplified layers
 			if s.Simplify {
 				minZoom := layer.Minzoom
 				maxZoom := layer.Maxzoom
@@ -284,23 +332,36 @@ func (s *Server) getVectorTile(rctx context.Context, w io.Writer, r *http.Reques
 				fcLayer.Simplify(simplify.DouglasPeucker(simplifyThreshold))
 				fcLayer.RemoveEmpty(1.0, 1.0)
 			}
+
 			fcLayers[i] = fcLayer
 			return nil
 		})
 	}
+
 	// Wait for all of the goroutines spawned in this errgroup to complete or fail
 	if err := eg.Wait(); err != nil {
 		// If any of them fail, return the error
-		return err
+		s.handleError(err, w, r)
+		return
 	}
 
 	// Lastly, marshal the object into the response output
 	data, marshalErr := mvt.MarshalGzipped(fcLayers)
 	if marshalErr != nil {
-		return marshalErr
+		s.handleError(marshalErr, w, r)
+		return
 	}
-	_, err = w.Write(data)
-	return err
+
+	// Set standard response headers
+	// TODO: Figure out a smarter cacheing mechanism (see StationA/tilenol#30)
+	w.Header().Set("Cache-Control", "max-age=86400")
+	w.Header().Set("Content-Encoding", "gzip")
+	w.Header().Set("Content-Type", "application/x-protobuf")
+
+	if _, err := w.Write(data); err != nil {
+		s.handleError(err, w, r)
+		return
+	}
 }
 
 // handleError is a helper function to generate a generic tile server error response

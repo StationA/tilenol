@@ -1,7 +1,10 @@
 package tilenol
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/gob"
 	"errors"
 	"fmt"
 
@@ -31,6 +34,8 @@ type LayerConfig struct {
 	Minzoom int `yaml:"minzoom"`
 	// Maxzoom specifies the maximum z value for the layer
 	Maxzoom int `yaml:"maxzoom"`
+	// NoCache indicates that this layer should not cache its source data
+	NoCache bool `yaml:"nocache"`
 	// Source configures the underlying Source for the layer
 	Source SourceConfig `yaml:"source"`
 }
@@ -47,7 +52,8 @@ type Layer struct {
 	Description string
 	Minzoom     int
 	Maxzoom     int
-	Source      Source
+	Cacheable   bool
+	source      Source // Note that source is not exported to avoid encoding issues
 }
 
 // CreateLayer creates a new Layer given a LayerConfig
@@ -57,6 +63,7 @@ func CreateLayer(layerConfig LayerConfig) (*Layer, error) {
 		Description: layerConfig.Description,
 		Minzoom:     layerConfig.Minzoom,
 		Maxzoom:     layerConfig.Maxzoom,
+		Cacheable:   !layerConfig.NoCache,
 	}
 	// TODO: How can we make this more generic?
 	if layerConfig.Source.Elasticsearch != nil && layerConfig.Source.PostGIS != nil {
@@ -70,7 +77,7 @@ func CreateLayer(layerConfig LayerConfig) (*Layer, error) {
 		if err != nil {
 			return nil, err
 		}
-		layer.Source = source
+		layer.source = source
 		return layer, nil
 	}
 	if layerConfig.Source.PostGIS != nil {
@@ -78,8 +85,31 @@ func CreateLayer(layerConfig LayerConfig) (*Layer, error) {
 		if err != nil {
 			return nil, err
 		}
-		layer.Source = source
+		layer.source = source
 		return layer, nil
 	}
 	return nil, fmt.Errorf("Invalid layer source config for layer: %s", layerConfig.Name)
+}
+
+// GetFeatures implements a passthrough interface to the layer's underlying source
+func (l Layer) GetFeatures(ctx context.Context, r *TileRequest) (*geojson.FeatureCollection, error) {
+	return l.source.GetFeatures(ctx, r)
+}
+
+// Hash computes a content-based SHA256 digest to diff layer "versions"
+func (l Layer) Hash() string {
+	var buf bytes.Buffer
+	enc := gob.NewEncoder(&buf)
+	err := enc.Encode(l)
+	if err != nil {
+		panic(err)
+	}
+	hash := sha256.New()
+	hash.Write(buf.Bytes())
+	hashBytes := hash.Sum(nil)
+	return fmt.Sprintf("%x", hashBytes)
+}
+
+func (l Layer) String() string {
+	return fmt.Sprintf("%s@%s", l.Name, l.Hash())
 }
