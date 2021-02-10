@@ -53,7 +53,7 @@ type Layer struct {
 	Minzoom     int
 	Maxzoom     int
 	Cacheable   bool
-	Source      Source
+	source      Source // Note that source is not exported to avoid encoding issues
 }
 
 // CreateLayer creates a new Layer given a LayerConfig
@@ -77,7 +77,7 @@ func CreateLayer(layerConfig LayerConfig) (*Layer, error) {
 		if err != nil {
 			return nil, err
 		}
-		layer.Source = source
+		layer.source = source
 		return layer, nil
 	}
 	if layerConfig.Source.PostGIS != nil {
@@ -85,16 +85,25 @@ func CreateLayer(layerConfig LayerConfig) (*Layer, error) {
 		if err != nil {
 			return nil, err
 		}
-		layer.Source = source
+		layer.source = source
 		return layer, nil
 	}
 	return nil, fmt.Errorf("Invalid layer source config for layer: %s", layerConfig.Name)
 }
 
+// GetFeatures implements a passthrough interface to the layer's underlying source
+func (l Layer) GetFeatures(ctx context.Context, r *TileRequest) (*geojson.FeatureCollection, error) {
+	return l.source.GetFeatures(ctx, r)
+}
+
+// Hash computes a content-based SHA256 digest to diff layer "versions"
 func (l Layer) Hash() string {
 	var buf bytes.Buffer
 	enc := gob.NewEncoder(&buf)
-	enc.Encode(l)
+	err := enc.Encode(l)
+	if err != nil {
+		panic(err)
+	}
 	hash := sha256.New()
 	hash.Write(buf.Bytes())
 	hashBytes := hash.Sum(nil)

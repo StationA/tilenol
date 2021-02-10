@@ -213,7 +213,7 @@ func filterLayersByZoom(inLayers []Layer, z int) []Layer {
 
 // getLayerDataFromSource retrieves layer data from the original backend source
 func (s *Server) getLayerDataFromSource(ctx context.Context, layer Layer, req *TileRequest) (*mvt.Layer, error) {
-	fc, err := layer.Source.GetFeatures(ctx, req)
+	fc, err := layer.GetFeatures(ctx, req)
 	if err != nil {
 		return nil, err
 	}

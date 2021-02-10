@@ -96,7 +96,7 @@ func TestCachedHandler(t *testing.T) {
 	source := &countingSource{Source: &NilSource{}}
 	cache := &countingCache{Cache: NewInMemoryCache()}
 	layers := []Layer{
-		Layer{Cacheable: true, Source: source},
+		Layer{Cacheable: true, source: source},
 	}
 	server := &Server{Layers: layers, Cache: cache}
 	handler, _ := server.setupRoutes()
@@ -121,7 +121,7 @@ func TestUnCachedHandler(t *testing.T) {
 	source := &countingSource{Source: &NilSource{}}
 	cache := &countingCache{Cache: &NilCache{}}
 	layers := []Layer{
-		Layer{Cacheable: true, Source: source},
+		Layer{Cacheable: true, source: source},
 	}
 	server := &Server{Layers: layers, Cache: cache}
 	handler, _ := server.setupRoutes()
@@ -147,8 +147,8 @@ func TestLayerCacheability(t *testing.T) {
 	cachedSource := &countingSource{Source: &NilSource{}}
 	cache := &countingCache{Cache: NewInMemoryCache()}
 	layers := []Layer{
-		Layer{Name: "cacheable", Cacheable: true, Source: cachedSource},
-		Layer{Name: "not-cacheable", Cacheable: false, Source: source},
+		Layer{Name: "cacheable", Cacheable: true, source: cachedSource},
+		Layer{Name: "not-cacheable", Cacheable: false, source: source},
 	}
 	server := &Server{Layers: layers, Cache: cache}
 	handler, _ := server.setupRoutes()
