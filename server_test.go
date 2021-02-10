@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"io/ioutil"
-	"net/http"
 	"net/http/httptest"
 	"testing"
 
@@ -100,7 +99,7 @@ func TestCachedHandler(t *testing.T) {
 		Layer{Cacheable: true, Source: source},
 	}
 	server := &Server{Layers: layers, Cache: cache}
-	handler := http.HandlerFunc(server.getVectorTile)
+	handler, _ := server.setupRoutes()
 
 	for i := 0; i < 100; i++ {
 		body := ioutil.NopCloser(bytes.NewReader([]byte{}))
@@ -125,7 +124,7 @@ func TestUnCachedHandler(t *testing.T) {
 		Layer{Cacheable: true, Source: source},
 	}
 	server := &Server{Layers: layers, Cache: cache}
-	handler := http.HandlerFunc(server.getVectorTile)
+	handler, _ := server.setupRoutes()
 
 	for i := 0; i < 100; i++ {
 		body := ioutil.NopCloser(bytes.NewReader([]byte{}))
@@ -148,11 +147,11 @@ func TestLayerCacheability(t *testing.T) {
 	cachedSource := &countingSource{Source: &NilSource{}}
 	cache := &countingCache{Cache: NewInMemoryCache()}
 	layers := []Layer{
-		Layer{Cacheable: true, Source: cachedSource},
-		Layer{Cacheable: false, Source: source},
+		Layer{Name: "cacheable", Cacheable: true, Source: cachedSource},
+		Layer{Name: "not-cacheable", Cacheable: false, Source: source},
 	}
 	server := &Server{Layers: layers, Cache: cache}
-	handler := http.HandlerFunc(server.getVectorTile)
+	handler, _ := server.setupRoutes()
 
 	for i := 0; i < 100; i++ {
 		body := ioutil.NopCloser(bytes.NewReader([]byte{}))
