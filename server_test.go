@@ -167,8 +167,11 @@ func TestLayerCacheability(t *testing.T) {
 	if !(source.GetCounter == 100) {
 		t.Errorf("Requests should not be cached for the not-cacheable layer: %d", source.GetCounter)
 	}
-	if !(cachedSource.GetCounter == 1) {
+	if !(cachedSource.GetCounter == 1 && cache.GetCounter == 99) {
 		t.Errorf("Requests should be cached for the cacheable layer: %d", cachedSource.GetCounter)
+	}
+	if !(cache.PutCounter == 1) {
+		t.Errorf("Request should only put cache values for cacheable layers once: %d", cache.PutCounter)
 	}
 }
 

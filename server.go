@@ -260,15 +260,17 @@ func (s *Server) getLayerData(ctx context.Context, layer Layer, req *TileRequest
 		return nil, err
 	}
 
-	// Note: paulmach/orb only implements marshalling code for an array of layer objects,
-	// so we need to wrap the computed fcLayer into a single-item array
-	raw, err := mvt.MarshalGzipped(mvt.Layers{fcLayer})
-	if err != nil {
-		return nil, err
-	}
+	if layer.Cacheable {
+		// Note: paulmach/orb only implements marshalling code for an array of layer objects,
+		// so we need to wrap the computed fcLayer into a single-item array
+		raw, err := mvt.MarshalGzipped(mvt.Layers{fcLayer})
+		if err != nil {
+			return nil, err
+		}
 
-	if err := s.Cache.Put(cacheKey, raw); err != nil {
-		Logger.Warningf("Failed to store layer data in cache [%s]: %s", cacheKey, err)
+		if err := s.Cache.Put(cacheKey, raw); err != nil {
+			Logger.Warningf("Failed to store layer data in cache [%s]: %s", cacheKey, err)
+		}
 	}
 
 	return fcLayer, nil
