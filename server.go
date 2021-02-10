@@ -327,8 +327,8 @@ func (s *Server) getVectorTile(w http.ResponseWriter, r *http.Request) {
 			if s.Simplify {
 				minZoom := layer.Minzoom
 				maxZoom := layer.Maxzoom
-				simplifyThreshold := calculateSimplificationThreshold(minZoom, maxZoom, req.Z)
-				Logger.Debugf("Simplifying @ zoom [%d], epsilon [%f]", req.Z, simplifyThreshold)
+				simplifyThreshold := calculateSimplificationThreshold(minZoom, maxZoom, z)
+				Logger.Debugf("Simplifying @ zoom [%d], epsilon [%f]", z, simplifyThreshold)
 				fcLayer.Simplify(simplify.DouglasPeucker(simplifyThreshold))
 				fcLayer.RemoveEmpty(1.0, 1.0)
 			}
