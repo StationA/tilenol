@@ -46,8 +46,7 @@ type PostGISConfig struct {
 	SourceFields map[string]string `yaml:"sourceFields"`
 }
 
-// Dataset constructs a CTE-based SelectDataset to be used as the source table for all request-time
-// queries
+// Dataset constructs a subquery to be used as the source table for all request-time queries
 func (c *PostGISConfig) Dataset() (*goqu.SelectDataset, error) {
 	// Ensure that table configuration makes sense
 	if c.TableExpression != "" && (c.Schema != "" || c.Table != "") {
