@@ -18,13 +18,14 @@ import (
 )
 
 const (
-	CTEName = "__tilenol__table"
+	TableAlias = "__tilenol__table"
 	// TODO: Externalize this?
 	QueryTimeout = 30 * time.Second
 )
 
 var (
 	InvalidTableConfig = errors.New("Either \"tableExpression\" or \"table\" + \"schema\" can be set, not both.")
+	MissingTableConfig = errors.New("Either \"tableExpression\" or \"table\" + \"schema\" must be set.")
 )
 
 // PostGISConfig is the YAML configuration structure for configuring a new
@@ -45,29 +46,27 @@ type PostGISConfig struct {
 	SourceFields map[string]string `yaml:"sourceFields"`
 }
 
-// Dataset constructs a CTE-based SelectDataset to be used as the source table for all request-time
-// queries
+// Dataset constructs a subquery to be used as the source table for all request-time queries
 func (c *PostGISConfig) Dataset() (*goqu.SelectDataset, error) {
 	// Ensure that table configuration makes sense
 	if c.TableExpression != "" && (c.Schema != "" || c.Table != "") {
 		return nil, InvalidTableConfig
 	}
 
-	var table goqu.Expression
 	if c.Table != "" {
 		var relation = goqu.T(c.Table)
 		if c.Schema != "" {
 			relation = relation.Schema(c.Schema)
 		}
-		table = goqu.From(relation)
+		return goqu.From(relation), nil
 	} else if c.TableExpression != "" {
 		var tableExp = strings.TrimSpace(c.TableExpression)
 		if !strings.HasPrefix(tableExp, "(") {
 			tableExp = fmt.Sprintf("(%s)", tableExp)
 		}
-		table = goqu.Literal(tableExp)
+		return goqu.From(goqu.Literal(tableExp).As(TableAlias)), nil
 	}
-	return goqu.From(CTEName).With(CTEName, table), nil
+	return nil, MissingTableConfig
 }
 
 // PostGISSource is a Source implementation that retrieves feature data from a
