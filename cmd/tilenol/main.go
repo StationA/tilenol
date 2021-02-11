@@ -67,12 +67,12 @@ func printVersionInfo() {
 }
 
 func main() {
+	cmd := kingpin.Parse()
+
 	if *numProcs < 1 {
 		*numProcs = runtime.NumCPU()
 	}
 	runtime.GOMAXPROCS(*numProcs)
-
-	cmd := kingpin.Parse()
 
 	switch cmd {
 	case runCmd.FullCommand():
