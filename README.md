@@ -95,8 +95,9 @@ Instructions for adding a Tilenol layer to QGIS 3.16:
   1. Min.Zoom Level: 0
   1. Max.Zoom Level: 25
 
-    Example screenshot, pointing QGIS to a locally running instance of Tilenol:
-    ![](Local_Tilenol_QGIS.png)
+Example screenshot, pointing QGIS to a locally running instance of Tilenol:
+
+![](Local_Tilenol_QGIS.png)
 
 1. Click OK and then Add
 1. You should be able to see the Tilenol places layer at appropriate zoom levels
