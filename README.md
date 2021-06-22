@@ -1,4 +1,4 @@
-# tilenol [![GoDoc](https://godoc.org/github.com/StationA/tilenol?status.svg)](https://godoc.org/github.com/StationA/tilenol) [![Go Report Card](https://goreportcard.com/badge/github.com/stationa/tilenol)](https://goreportcard.com/report/github.com/stationa/tilenol) [![Build Status](https://api.travis-ci.com/StationA/tilenol.svg?branch=master)](https://travis-ci.com/StationA/tilenol) [![Docker Pulls](https://img.shields.io/docker/pulls/stationa/tilenol)](https://hub.docker.com/repository/docker/stationa/tilenol)
+# tilenol [![GoDoc](https://godoc.org/github.com/StationA/tilenol?status.svg)](https://godoc.org/github.com/StationA/tilenol) [![Go Report Card](https://goreportcard.com/badge/github.com/stationa/tilenol)](https://goreportcard.com/report/github.com/stationa/tilenol) [![Build Status](https://api.travis-ci.com/StationA/tilenol.svg?branch=main)](https://travis-ci.com/StationA/tilenol) [![Docker Pulls](https://img.shields.io/docker/pulls/stationa/tilenol)](https://hub.docker.com/repository/docker/stationa/tilenol)
 
 Tilenol is a scalable web server for serving geospatial data stored in
 [multiple supported backends](#supported-backends) as Mapbox Vector Tiles.
@@ -90,10 +90,10 @@ Instructions for adding a Tilenol layer to QGIS 3.16:
 1. Navigate to Layer > Add Layer > Add Vector Tile Layer
 1. Click on New, and then Create a New Generic Connection
 1. Configure the Connection Details, for example:
-  1. Name: Places
-  1. URL: http://localhost:3000/places/{z}/{x}/{y}.mvt
-  1. Min.Zoom Level: 0
-  1. Max.Zoom Level: 25
+1. Name: Places
+1. URL: http://localhost:3000/places/{z}/{x}/{y}.mvt
+1. Min.Zoom Level: 0
+1. Max.Zoom Level: 25
 
 Example screenshot, pointing QGIS to a locally running instance of Tilenol:
 
