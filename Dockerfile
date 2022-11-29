@@ -6,7 +6,7 @@ ADD . /go/src/github.com/stationa/tilenol
 WORKDIR /go/src/github.com/stationa/tilenol
 RUN make release
 
-FROM alpine:3.7
+FROM alpine:3
 
 COPY --from=build /go/src/github.com/stationa/tilenol/target/tilenol /usr/bin/tilenol
 
