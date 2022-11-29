@@ -74,14 +74,45 @@ layers:
           height_ft: building.height_ft
 ```
 
-### Supported backends
+### Docker
+
+Tilenol is also available as
+[`stationa/tilenol` on DockerHub](https://hub.docker.com/repository/docker/stationa/tilenol). This
+can be helpful when running in cloud environments or on Kubernetes:
+
+```bash
+# To run the Docker image on your machine, you can use the following:
+
+docker run \
+  --rm \
+  -it \
+  -p 3000:3000 \
+  -v my-tilenol-conf.yml:/conf/tilenol.yml \
+  stationa/tilenol \
+  run -p 3000 -f /conf/tilenol.yml
+
+# Note that this will bind tilenol to your local port 3000, and requires a configuration file to be
+# mounted at the /conf/tilenol.yml path
+```
+
+Currently, the Docker image tags are published according to the following scheme:
+
+- `vM.m.p` is the image built for the exact SemVer major/minor/patch version `M.m.p`, e.g. `v1.0.7`
+- `vM` is the latest image available for the given SemVer major version number `M`, e.g. `v1`
+- `latest` is the latest stable image available
+- `devel` is the latest unstable image available based on the last commit made to the `main` branch
+
+We recommend you use either `vM` or `vM.m.p` where possible, though your appetite for risk may vary
+by use case.
+
+## Supported backends
 
 Currently, tilenol supports the following data backends:
 
 - [Elasticsearch](examples/elasticsearch/)
 - [PostGIS](examples/postgis/)
 
-### QGIS support
+## QGIS support
 
 Tilenol layers can also be viewed in GIS software such as QGIS.
 
