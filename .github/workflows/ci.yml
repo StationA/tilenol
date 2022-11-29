@@ -15,15 +15,15 @@ jobs:
 
     steps:
       - name: Pull source
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: Set up Go ${{ matrix.go-version }}
         uses: actions/setup-go@v3
         with:
           go-version: ${{ matrix.go-version }}
 
-      - name: Build
+      - name: Build ${{ matrix.go-version }}
         run: go build -v ./...
 
-      - name: Test
+      - name: Test ${{ matrix.go-version }}
         run: go test -v ./...
