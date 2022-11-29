@@ -1,9 +1,5 @@
 name: CI
-on:
-  push:
-    branches:
-      - main
-      - gh-32
+on: [ push, pull_request ]
 
 jobs:
   build:
@@ -27,3 +23,52 @@ jobs:
 
       - name: Test ${{ matrix.go-version }}
         run: go test -v ./...
+
+  build-and-push-docker:
+    name: Build and push Docker images
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Pull source
+        uses: actions/checkout@v3
+
+      - name: Log in to the Github container registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v4
+        with:
+          # NOTE: This can also be triggered for multiple registries, e.g. DockerHub
+          images: ghcr.io/stationa/tilenol
+
+      - name: Build and push unstable images
+        if: github.event_name == 'push' && github.ref_name == 'main'
+        uses: docker/build-push-action@v3
+        with:
+          context: .
+          push: false  # TODO: Set to ${{ github.event_name != 'pull_request' }}
+          tags: |
+            type=raw,value=devel,enable={{is_default_branch}}
+            type=raw,value=devel-branch{{ branch }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+      - name: Build and push release images
+        if: github.event_name == 'tag'
+        uses: docker/build-push-action@v3
+        with:
+          context: .
+          push: false  # TODO: Set to ${{ github.event_name != 'pull_request' }}
+          tags: |
+            type=semver,pattern=v{{version}}
+            type=semver,pattern=v{{major}}
+            type=semver,value=latest
+          labels: ${{ steps.meta.outputs.labels }}
