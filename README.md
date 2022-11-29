@@ -1,4 +1,4 @@
-# tilenol [![GoDoc](https://godoc.org/github.com/StationA/tilenol?status.svg)](https://godoc.org/github.com/StationA/tilenol) [![Go Report Card](https://goreportcard.com/badge/github.com/stationa/tilenol)](https://goreportcard.com/report/github.com/stationa/tilenol) [![Build Status](https://api.travis-ci.com/StationA/tilenol.svg?branch=main)](https://travis-ci.com/StationA/tilenol) [![Docker Pulls](https://img.shields.io/docker/pulls/stationa/tilenol)](https://hub.docker.com/repository/docker/stationa/tilenol)
+# tilenol [![GoDoc](https://godoc.org/github.com/StationA/tilenol?status.svg)](https://godoc.org/github.com/StationA/tilenol) [![Go Report Card](https://goreportcard.com/badge/github.com/stationa/tilenol)](https://goreportcard.com/report/github.com/stationa/tilenol) ![Build Status](https://img.shields.io/github/workflow/status/StationA/tilenol/ci) [![Docker Pulls](https://img.shields.io/docker/pulls/stationa/tilenol)](https://hub.docker.com/repository/docker/stationa/tilenol)
 
 Tilenol is a scalable web server for serving geospatial data stored in
 [multiple supported backends](#supported-backends) as Mapbox Vector Tiles.
