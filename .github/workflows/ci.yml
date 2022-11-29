@@ -51,7 +51,7 @@ jobs:
           images: ghcr.io/stationa/tilenol
 
       - name: Build and push unstable images
-        if: github.event_name == 'push' && github.ref_name == 'main'
+        if: github.event_name == 'push'
         uses: docker/build-push-action@v3
         with:
           context: .
