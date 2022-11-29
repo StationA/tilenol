@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - main
+      - gh-32
 
 jobs:
   build:
