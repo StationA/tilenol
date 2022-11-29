@@ -2,7 +2,7 @@ name: CI
 on: [ push, pull_request ]
 
 jobs:
-  build:
+  ci:
     name: Build and test
     runs-on: ubuntu-latest
     strategy:
@@ -48,27 +48,19 @@ jobs:
         uses: docker/metadata-action@v4
         with:
           # NOTE: This can also be triggered for multiple registries, e.g. DockerHub
+          tags: |
+            type=raw,value=devel,enable={{is_default_branch}}
+            type=raw,value=devel-{{ branch }}=enable={{!is_default_branch}}
+            type=semver,pattern=v{{version}}
+            type=semver,pattern=v{{major}}
+            type=semver,value=latest
           images: ghcr.io/stationa/tilenol
 
-      - name: Build and push unstable images
+      - name: Build and push images
         if: github.event_name == 'push'
         uses: docker/build-push-action@v3
         with:
           context: .
           push: false  # TODO: Set to ${{ github.event_name != 'pull_request' }}
-          tags: |
-            type=raw,value=devel,enable={{is_default_branch}}
-            type=raw,value=devel-branch{{ branch }}
-          labels: ${{ steps.meta.outputs.labels }}
-
-      - name: Build and push release images
-        if: github.event_name == 'tag'
-        uses: docker/build-push-action@v3
-        with:
-          context: .
-          push: false  # TODO: Set to ${{ github.event_name != 'pull_request' }}
-          tags: |
-            type=semver,pattern=v{{version}}
-            type=semver,pattern=v{{major}}
-            type=semver,value=latest
+          tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
