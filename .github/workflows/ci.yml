@@ -4,6 +4,8 @@ on: [ push, pull_request ]
 jobs:
   ci:
     name: Build and test
+    concurrency:
+      group: ci-${{ github.ref }}
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -26,6 +28,8 @@ jobs:
 
   build-and-push-docker:
     name: Build and push Docker images
+    concurrency:
+      group: ci-${{ github.ref }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
