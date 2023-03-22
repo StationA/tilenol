@@ -215,6 +215,20 @@ func filterLayersByZoom(inLayers []Layer, z int) []Layer {
 	return outLayers
 }
 
+
+// Filter out Features with an empty geometry in a Layer.
+func filterEmptyGeometries(layer *mvt.Layer) {
+        count := 0
+	for _, f := range layer.Features {
+		if f.Geometry != nil {
+		        layer.Features[count] = f
+			count++
+		}
+	}
+	layer.Features = layer.Features[:count]
+}
+
+
 // getLayerDataFromSource retrieves layer data from the original backend source
 func (s *Server) getLayerDataFromSource(ctx context.Context, layer Layer, req *TileRequest) (*mvt.Layer, error) {
 	fc, err := layer.GetFeatures(ctx, req)
@@ -263,7 +277,7 @@ func (s *Server) getLayerData(ctx context.Context, layer Layer, req *TileRequest
 	if err != nil {
 		return nil, err
 	}
-	fcLayer.RemoveEmpty(1.0, 1.0)
+	filterEmptyGeometries(fcLayer)
 
 	if layer.Cacheable {
 		// Note: paulmach/orb only implements marshalling code for an array of layer objects,
