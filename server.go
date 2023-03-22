@@ -263,6 +263,7 @@ func (s *Server) getLayerData(ctx context.Context, layer Layer, req *TileRequest
 	if err != nil {
 		return nil, err
 	}
+	fcLayer.RemoveEmpty(1.0, 1.0)
 
 	if layer.Cacheable {
 		// Note: paulmach/orb only implements marshalling code for an array of layer objects,
