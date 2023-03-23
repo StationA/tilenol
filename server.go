@@ -215,19 +215,17 @@ func filterLayersByZoom(inLayers []Layer, z int) []Layer {
 	return outLayers
 }
 
-
 // Filter out Features with an empty geometry in a Layer.
 func filterEmptyGeometries(layer *mvt.Layer) {
-        count := 0
+	count := 0
 	for _, f := range layer.Features {
 		if f.Geometry != nil {
-		        layer.Features[count] = f
+			layer.Features[count] = f
 			count++
 		}
 	}
 	layer.Features = layer.Features[:count]
 }
-
 
 // getLayerDataFromSource retrieves layer data from the original backend source
 func (s *Server) getLayerDataFromSource(ctx context.Context, layer Layer, req *TileRequest) (*mvt.Layer, error) {
