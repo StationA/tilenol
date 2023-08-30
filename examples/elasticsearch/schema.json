@@ -5,7 +5,7 @@
         "name": {
           "type": "text"
         },
-        "stories": {
+        "height": {
           "type": "integer"
         },
         "geometry": {

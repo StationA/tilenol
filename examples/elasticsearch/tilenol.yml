@@ -15,5 +15,5 @@ layers:
         index: buildings
         geometryField: geometry
         sourceFields:
-          area_sqft: building.area_sqft
-          height_ft: building.height_ft
+          name: name
+          height: height
