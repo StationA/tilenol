@@ -36,6 +36,8 @@ type ElasticsearchConfig struct {
 	// SourceFields is a mapping from the feature property name to the source document
 	// field name
 	SourceFields map[string]string `yaml:"sourceFields"`
+	// EnableSniff
+	Sniff bool `yaml:"sniff"`
 }
 
 // ElasticsearchSource is a Source implementation that retrieves feature data from an
@@ -73,6 +75,7 @@ func NewElasticsearchSource(config *ElasticsearchConfig) (Source, error) {
 	es, err := elastic.NewClient(
 		elastic.SetURL(fmt.Sprintf("http://%s:%d", config.Host, config.Port)),
 		elastic.SetGzip(true),
+		elastic.SetSniff(config.Sniff),
 		// TODO: Should this be configurable?
 		elastic.SetHealthcheckTimeoutStartup(10*time.Second),
 	)
