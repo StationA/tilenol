@@ -2,6 +2,7 @@ package tilenol
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -9,6 +10,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"syscall"
 
 	"github.com/go-chi/chi"
 	"github.com/go-chi/chi/middleware"
@@ -383,6 +385,11 @@ func (s *Server) getVectorTile(w http.ResponseWriter, r *http.Request) {
 
 // handleError is a helper function to generate a generic tile server error response
 func (s *Server) handleError(err error, w http.ResponseWriter, r *http.Request) {
+	// Don't attempt to handle broken pipe errors (no one's listening on the other side!)
+	if errors.Is(err, syscall.EPIPE) {
+		return
+	}
+
 	var errCode int
 	switch err.(type) {
 	case InvalidRequestError:
