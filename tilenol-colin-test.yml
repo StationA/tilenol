@@ -1,0 +1,340 @@
+layers:
+  - name: buildings
+    minzoom: 14
+    source:
+      elasticsearch:
+        host: elasticsearch.dwh.svc.cluster.local
+        port: 80
+        index: buildings
+        geometryField: geometry
+        sourceFields:
+          height_m: height_m
+  - name: circuits
+    minzoom: 12
+    source:
+      elasticsearch:
+        host: elasticsearch.dwh.svc.cluster.local
+        port: 80
+        index: circuits
+        geometryField: geometry
+  - name: list-locations
+    nocache: true
+    minzoom: 12
+    source:
+      postgis:
+        dsn: host=10.160.0.8 dbname=postgres port=5432 user=postgres password=4OiA779IHRGuiOcy sslmode=disable
+        tableExpression: >
+          SELECT
+            r.list_id AS list_id,
+            p.place_id::TEXT AS place_id,
+            l.id::TEXT AS location_id,
+            l.name AS name,
+            lb.height_m AS height_m,
+            lb.geometry AS geometry,
+            COALESCE(le.annual_peak_kw, 0) AS annual_peak_kw,
+            COALESCE(le.annual_usage_kwh, 0) AS annual_usage_kwh,
+            COALESCE(slr.solar_kw, 0)::FLOAT AS solar_potential_kw,
+            COALESCE(blr.battery_kw, 0)::FLOAT AS battery_potential_kw
+          FROM
+            location.locations l
+          JOIN
+            (
+              SELECT
+                REPLACE(subject, '/lists/', '') AS list_id,
+                value AS location_ref
+              FROM
+                link.relations
+              WHERE
+                predicate = 'location'
+            ) r ON '/locations/' || l.id::TEXT = r.location_ref
+          JOIN
+            (
+              SELECT
+                location_id,
+                (stories * 3.3)::FLOAT AS height_m,
+                geometry
+              FROM
+                location.location_buildings
+            ) lb ON l.id = lb.location_id
+          LEFT OUTER JOIN
+            (
+              SELECT
+                subject AS location_ref,
+                REPLACE(value, '/places/', '') AS place_id
+              FROM
+                link.relations
+              WHERE
+                predicate = 'sameas'
+            ) p ON '/locations/' || l.id = p.location_ref
+          LEFT OUTER JOIN
+            (
+              SELECT
+                location_id,
+                (SELECT MAX(p) FROM UNNEST(total_peak_kw) AS p) AS annual_peak_kw,
+                (SELECT SUM(u) FROM UNNEST(total_usage_kwh) AS u) AS annual_usage_kwh
+              FROM
+                location.location_energies
+            ) le ON l.id = le.location_id
+          LEFT OUTER JOIN
+            (
+              SELECT DISTINCT ON (location_id)
+                location_id,
+                battery_kw
+              FROM
+                location.location_recommendations
+              WHERE
+                technology = 'battery'
+              ORDER BY
+                location_id,
+                updated DESC
+            ) blr ON l.id = blr.location_id
+          LEFT OUTER JOIN
+            (
+              SELECT DISTINCT ON (location_id)
+                location_id,
+                solar_kw
+              FROM
+                location.location_recommendations
+              WHERE
+                technology = 'solar'
+              ORDER BY
+                location_id,
+                updated DESC
+            ) slr ON l.id = slr.location_id
+        geometryField: geometry
+        sourceFields:
+          place_id: place_id
+          location_id: location_id
+          list_id: list_id
+          name: name
+          height_m: height_m
+          annual_peak_kw: annual_peak_kw
+          annual_usage_kwh: annual_usage_kwh
+          solar_potential_kw: solar_potential_kw
+          battery_potential_kw: battery_potential_kw
+  - name: list-locations-points
+    nocache: true
+    minzoom: 2
+    maxzoom: 15
+    source:
+      postgis:
+        dsn: host=10.160.0.8 dbname=postgres port=5432 user=postgres password=4OiA779IHRGuiOcy sslmode=disable
+        tableExpression: >
+          SELECT
+            r.list_id AS list_id,
+            p.place_id::TEXT AS place_id,
+            l.id::TEXT AS location_id,
+            l.name AS name,
+            lb.height_m AS height_m,
+            lb.centroid AS centroid,
+            COALESCE(le.annual_peak_kw, 0) AS annual_peak_kw,
+            COALESCE(le.annual_usage_kwh, 0) AS annual_usage_kwh,
+            COALESCE(slr.solar_kw, 0)::FLOAT AS solar_potential_kw,
+            COALESCE(blr.battery_kw, 0)::FLOAT AS battery_potential_kw
+          FROM
+            location.locations l
+          JOIN
+            (
+              SELECT
+                REPLACE(subject, '/lists/', '') AS list_id,
+                value AS location_ref
+              FROM
+                link.relations
+              WHERE
+                predicate = 'location'
+            ) r ON '/locations/' || l.id::TEXT = r.location_ref
+          JOIN
+            (
+              SELECT
+                location_id,
+                (stories * 3.3)::FLOAT AS height_m,
+                centroid
+              FROM
+                location.location_buildings
+            ) lb ON l.id = lb.location_id
+          LEFT OUTER JOIN
+            (
+              SELECT
+                subject AS location_ref,
+                REPLACE(value, '/places/', '') AS place_id
+              FROM
+                link.relations
+              WHERE
+                predicate = 'sameas'
+            ) p ON '/locations/' || l.id = p.location_ref
+          LEFT OUTER JOIN
+            (
+              SELECT
+                location_id,
+                (SELECT MAX(p) FROM UNNEST(total_peak_kw) AS p) AS annual_peak_kw,
+                (SELECT SUM(u) FROM UNNEST(total_usage_kwh) AS u) AS annual_usage_kwh
+              FROM
+                location.location_energies
+            ) le ON l.id = le.location_id
+          LEFT OUTER JOIN
+            (
+              SELECT DISTINCT ON (location_id)
+                location_id,
+                battery_kw
+              FROM
+                location.location_recommendations
+              WHERE
+                technology = 'battery'
+              ORDER BY
+                location_id,
+                updated DESC
+            ) blr ON l.id = blr.location_id
+          LEFT OUTER JOIN
+            (
+              SELECT DISTINCT ON (location_id)
+                location_id,
+                solar_kw
+              FROM
+                location.location_recommendations
+              WHERE
+                technology = 'solar'
+              ORDER BY
+                location_id,
+                updated DESC
+            ) slr ON l.id = slr.location_id
+        geometryField: centroid
+        sourceFields:
+          place_id: place_id
+          location_id: location_id
+          list_id: list_id
+          name: name
+          height_m: height_m
+          annual_peak_kw: annual_peak_kw
+          annual_usage_kwh: annual_usage_kwh
+          solar_potential_kw: solar_potential_kw
+          battery_potential_kw: battery_potential_kw
+  - name: localities
+    minzoom: 6
+    source:
+      elasticsearch:
+        host: elasticsearch.dwh.svc.cluster.local
+        port: 80
+        index: localities
+        geometryField: geometry
+  - name: parcels
+    minzoom: 14
+    source:
+      elasticsearch:
+        host: elasticsearch.dwh.svc.cluster.local
+        port: 80
+        index: parcels
+        geometryField: geometry
+  - name: places
+    minzoom: 10
+    source:
+      elasticsearch:
+        host: elasticsearch.dwh.svc.cluster.local
+        port: 80
+        index: places-v2
+        geometryField: location.building.geometry
+        sourceFields:
+          height_m: location.building.height_m
+          solar_potential_kw: quote.solar.potential_kw
+          battery_potential_kw: quote.battery.potential_kw
+          annual_peak_kw: energy.annual_peak_kw.total
+          annual_usage_kwh: energy.annual_usage_kwh.total
+  - name: places-points
+    minzoom: 2
+    source:
+      elasticsearch:
+        host: elasticsearch.dwh.svc.cluster.local
+        port: 80
+        index: places-v2
+        geometryField: location.centroid.shape
+        sourceFields:
+          height_m: location.building.height_m
+          solar_potential_kw: quote.solar.potential_kw
+          battery_potential_kw: quote.battery.potential_kw
+          annual_peak_kw: energy.annual_peak_kw.total
+          annual_usage_kwh: energy.annual_usage_kwh.total
+  - name: places-grades-points
+    minzoom: 4
+    source:
+      elasticsearch:
+        host: elasticsearch.dwh.svc.cluster.local
+        port: 80
+        index: places-v2
+        geometryField: location.centroid.shape
+        sourceFields:
+          grade: score.grade
+  - name: substations
+    minzoom: 2
+    source:
+      elasticsearch:
+        host: elasticsearch.dwh.svc.cluster.local
+        port: 80
+        index: substations
+        geometryField: geometry
+  - name: transmission_lines
+    minzoom: 8
+    source:
+      elasticsearch:
+        host: elasticsearch.dwh.svc.cluster.local
+        port: 80
+        index: transmission_lines
+        geometryField: geometry
+  - name: census-tracts-with-ira-adders
+    minzoom: 2
+    source:
+      postgis:
+        dsn: host=10.160.0.8 dbname=postgres port=5432 user=postgres password=4OiA779IHRGuiOcy sslmode=disable
+        schema: market_conditions
+        table: census_tract_to_incentives
+        geometryField: geometry
+        sourceFields:
+          census_geo_id: census_geo_id
+          census_state_county_id: census_state_county_id
+          census_tract_id: census_tract_id
+          has_itc_adder_energy_community: has_itc_adder_energy_community
+          is_low_income_community: is_low_income_community
+          is_coal_community: is_coal_community
+          is_fossil_fuel_employment_community: is_fossil_fuel_employment_community
+  - name: tribal-census-tracts
+    minzoom: 2
+    source:
+      postgis:
+        dsn: host=10.160.0.8 dbname=postgres port=5432 user=postgres password=4OiA779IHRGuiOcy sslmode=disable
+        schema: market_conditions
+        table: tribal_census_tracts
+        geometryField: geometry
+        sourceFields:
+          tribal_geoid: tribal_geoid
+          area_census_code: area_census_code
+          tribal_tract_code: tribal_tract_code
+  - name: census_tribal_intersect
+    minzoom: 2
+    source:
+      postgis:
+        dsn: host=10.160.0.8 dbname=postgres port=5432 user=postgres password=4OiA779IHRGuiOcy sslmode=disable
+        schema: market_conditions
+        table: census_tribal_intersect
+        geometryField: combined_geom
+        sourceFields:
+          tribal_geoid: tribal_geoid
+          census_geo_id: census_geo_id
+  - name: state_policy_grades
+    minzoom: 2
+    source:
+      postgis:
+        dsn: host=10.160.0.8 dbname=postgres port=5432 user=postgres password=4OiA779IHRGuiOcy sslmode=disable
+        schema: market_conditions
+        table: state_policy_grades
+        geometryField: geometry
+        sourceFields:
+          state_code: state_code
+          state_name: state_name
+          stationa_policy_grade: stationa_policy_grade
+          total_score: total_score
+          interconnection_favorability: interconnection_favorability
+          third_party_financing: third_party_financing
+          net_metering: net_metering
+          aggregate_net_metering: aggregate_net_metering
+          shared_renewables: shared_renewables
+          solar_incentives: solar_incentives
+          ev_charging_incentives: ev_charging_incentives
+          ppa_allowed: ppa_allowed
