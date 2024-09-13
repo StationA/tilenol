@@ -1,4 +1,4 @@
-FROM golang:alpine AS build
+FROM golang:1.22-alpine AS build
 
 RUN apk update && apk add build-base
 
@@ -6,7 +6,7 @@ ADD . /go/src/github.com/stationa/tilenol
 WORKDIR /go/src/github.com/stationa/tilenol
 RUN make release
 
-FROM alpine:3.7
+FROM alpine:3.20
 
 COPY --from=build /go/src/github.com/stationa/tilenol/target/tilenol /usr/bin/tilenol
 
