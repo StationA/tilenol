@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!doctype html>
 <html>
   <head>
     <meta charset="utf-8" />
@@ -24,7 +24,10 @@
         width: 100%;
       }
       .props {
+        display: block;
+        max-height: 480px;
         min-width: 240px;
+        overflow: auto;
       }
       .props tr td:first-child {
         font-weight: bold;
@@ -36,8 +39,12 @@
     <div id="map"></div>
     <script>
       // Set your Mapbox access token in the URL query string
-      mapboxgl.accessToken = window.location.search.substring(1);
+      var qp = new URLSearchParams(window.location.search);
+      mapboxgl.accessToken = qp.get("mapbox_access_token");
+      qp.delete("mapbox_access_token");
+
       var map = new mapboxgl.Map({
+        hash: true,
         style: "mapbox://styles/mapbox/dark-v9",
         center: [-71.06107, 42.36144],
         zoom: 15,
@@ -61,7 +68,10 @@
           type: "fill-extrusion",
           source: {
             type: "vector",
-            tiles: ["http://localhost:3000/buildings/{z}/{x}/{y}.mvt"],
+            tiles: [
+              "http://localhost:3000/buildings/{z}/{x}/{y}.mvt?" +
+                qp.toString(),
+            ],
           },
           "source-layer": "buildings",
           paint: {
@@ -72,13 +82,13 @@
         });
 
         map.on("click", "tilenol", function (e) {
-          var attrs = Object.entries(e.features[0].properties).map(function (
-            entry
-          ) {
-            var k = entry[0];
-            var v = entry[1];
-            return "<tr><td>" + k + "</td><td>" + v + "</td></tr>";
-          });
+          var attrs = Object.entries(e.features[0].properties).map(
+            function (entry) {
+              var k = entry[0];
+              var v = entry[1];
+              return "<tr><td>" + k + "</td><td>" + v + "</td></tr>";
+            },
+          );
           var popupHTML = "<table class='props'>" + attrs.join("") + "</table>";
           new mapboxgl.Popup()
             .setLngLat(e.lngLat)
