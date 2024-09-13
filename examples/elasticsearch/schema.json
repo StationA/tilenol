@@ -1,16 +1,14 @@
 {
   "mappings": {
-    "_doc": {
-      "properties": {
-        "name": {
-          "type": "text"
-        },
-        "height": {
-          "type": "integer"
-        },
-        "geometry": {
-          "type": "geo_shape"
-        }
+    "properties": {
+      "name": {
+        "type": "text"
+      },
+      "height": {
+        "type": "integer"
+      },
+      "geometry": {
+        "type": "geo_shape"
       }
     }
   }

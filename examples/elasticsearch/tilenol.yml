@@ -7,11 +7,13 @@
 # Layer configuration
 layers:
   - name: buildings
-    minzoom: 14
+    minzoom: 13
     source:
       elasticsearch:
-        host: localhost
-        port: 9200
+        hosts:
+          - "http://localhost:9200"
+        username: elastic
+        password: elastic
         index: buildings
         geometryField: geometry
         sourceFields:
