@@ -1,7 +1,6 @@
 module github.com/stationa/tilenol
 
-go 1.21
-toolchain go1.24.1
+go 1.25.0
 
 require (
 	github.com/DATA-DOG/go-sqlmock v1.3.3
@@ -35,7 +34,7 @@ require (
 	go.opentelemetry.io/otel v1.24.0 // indirect
 	go.opentelemetry.io/otel/metric v1.24.0 // indirect
 	go.opentelemetry.io/otel/trace v1.24.0 // indirect
-	golang.org/x/net v0.38.0 // indirect
-	golang.org/x/sys v0.31.0 // indirect
+	golang.org/x/net v0.55.0 // indirect
+	golang.org/x/sys v0.45.0 // indirect
 	gopkg.in/check.v1 v1.0.0-20190902080502-41f04d3bba15 // indirect
 )
